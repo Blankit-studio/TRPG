@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>다이스로그 — TRPG 모집 · 세션 기록 · 캐릭터 시트</title>
+  <meta name="description" content="GM과 플레이어가 함께 TRPG를 즐기는 공간. 캠페인을 모집하고, 세션을 기록하고, 캐릭터 시트를 관리하고, 실시간으로 주사위를 굴리세요." />
+  <link rel="preconnect" href="https://www.gstatic.com" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 상단 헤더 -->
+  <header class="app-header">
+    <a href="#/" class="brand">
+      <span class="brand-logo">🎲</span>
+      <span class="brand-name">다이스로그</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#/" class="nav-link" data-route="home">모집 둘러보기</a>
+      <a href="#/templates" class="nav-link" data-route="templates">템플릿</a>
+      <a href="#/me" class="nav-link" data-route="me" data-auth-only>내 테이블</a>
+    </nav>
+    <div class="auth-area" id="authArea">
+      <!-- 로그인 상태에 따라 JS가 채웁니다 -->
+    </div>
+  </header>
+
+  <!-- 설정 미완료 안내 배너 -->
+  <div id="configBanner" class="config-banner" hidden>
+    ⚠️ <strong>Firebase 설정이 필요합니다.</strong>
+    <code>firebase-config.js</code> 에 본인의 Firebase 값을 입력하세요. 자세한 방법은 <code>README.md</code> 참고.
+  </div>
+
+  <!-- 메인 뷰 영역 (라우터가 렌더링) -->
+  <main id="view" class="view"></main>
+
+  <!-- 모달 컨테이너 -->
+  <div id="modalRoot"></div>
+
+  <!-- 토스트 -->
+  <div id="toast" class="toast" hidden></div>
+
+  <footer class="app-footer">
+    <span>다이스로그 · GM과 플레이어를 위한 TRPG 테이블</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
