@@ -616,6 +616,20 @@ function renderCampaign(view, id) {
       panel.appendChild(jg);
     }
 
+    // 스토리 맵
+    const storyNodes = storyNodesFrom(data);
+    panel.appendChild(el("div", { class: "story-head" }, [
+      el("h3", { class: "block-title", style: "margin:0", text: "📖 스토리 맵" }),
+      el("div", { class: "grow" }),
+      isGM() ? el("button", { class: "btn btn-sm btn-primary", onclick: () => openStoryEditor(storyNodes, async (nodes) => {
+        try { await updateDoc(doc(db, "campaigns", id), { storyNodes: nodes, updatedAt: serverTimestamp() }); toast("스토리 맵을 저장했습니다."); return true; }
+        catch (e) { console.error(e); toast("저장 실패: " + (e.code || e.message), true); return false; }
+      }) }, "🧠 스토리 맵 편집") : null,
+    ]));
+    const storyBox = el("div");
+    panel.appendChild(storyBox);
+    renderStoryViewer(storyBox, storyNodes);
+
     // 멤버 목록
     panel.appendChild(el("h3", { class: "block-title", text: "참여 멤버" }));
     const memberBox = el("div", { class: "member-list" });
@@ -1042,7 +1056,7 @@ function renderTemplate(view, id) {
     wrap.innerHTML = "";
 
     const actions = el("div", { class: "schedule-actions" });
-    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, description: data.storyline || "", jobCategories: data.jobCategories || [] }) }, "🎲 이 설정으로 캠페인 열기"));
+    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, jobCategories: data.jobCategories || [], storyNodes: storyNodesFrom(data) }) }, "🎲 이 설정으로 캠페인 열기"));
     if (isOwner) {
       actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => openTemplateModal(data) }, "✏️ 편집"));
       actions.appendChild(el("button", { class: "btn btn-sm btn-danger", onclick: () => deleteTemplate(id, data.ownerUid) }, "삭제"));
@@ -1061,8 +1075,20 @@ function renderTemplate(view, id) {
     const jobsArr = normalizeJobs(data.jobCategories);
     if (!jobsArr.length) wrap.appendChild(el("div", { class: "card-sub", text: "등록된 직업이 없습니다." }));
     else { const jg = el("div", { class: "job-grid" }); jobsArr.forEach((j) => jg.appendChild(jobCardView(j))); wrap.appendChild(jg); }
-    wrap.appendChild(el("h3", { class: "block-title", text: "📖 스토리 라인" }));
-    wrap.appendChild(el("div", { class: "prose", text: data.storyline || "작성된 스토리 라인이 없습니다." }));
+    const storyBox = el("div");
+    const reloadStory = () => renderStoryViewer(storyBox, storyNodesFrom(data));
+    wrap.appendChild(el("div", { class: "story-head" }, [
+      el("h3", { class: "block-title", style: "margin:0", text: "📖 스토리 맵" }),
+      el("div", { class: "grow" }),
+      isOwner ? el("button", { class: "btn btn-sm btn-primary", onclick: () => openStoryEditor(storyNodesFrom(data), async (nodes) => {
+        try {
+          await updateDoc(doc(db, "templates", id), { storyNodes: nodes, updatedAt: serverTimestamp() });
+          data.storyNodes = nodes; reloadStory(); toast("스토리 맵을 저장했습니다."); return true;
+        } catch (e) { console.error(e); toast("저장 실패: " + (e.code || e.message), true); return false; }
+      }) }, "🧠 스토리 맵 편집") : null,
+    ]));
+    wrap.appendChild(storyBox);
+    reloadStory();
   }).catch((e) => { console.error(e); wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "불러오지 못했습니다." })); });
 }
 async function deleteTemplate(id, ownerUid) {
@@ -1133,6 +1159,7 @@ function openCampaignModal(existing, prefill) {
             const meInfo = me();
             const ref = await addDoc(collection(db, "campaigns"), {
               ...payload,
+              storyNodes: prefill?.storyNodes || [],
               gmUid: meInfo.uid, gmName: meInfo.name, gmPhoto: meInfo.photo,
               memberUids: [meInfo.uid],
               members: [{ uid: meInfo.uid, name: meInfo.name, photo: meInfo.photo }],
@@ -1320,7 +1347,7 @@ function openTemplateModal(existing) {
   if (!isMember()) { toast("템플릿을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
   const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: 인스머스의 그림자" });
   const job = jobEditor(existing?.jobCategories || []);
-  const storyInput = el("textarea", { maxlength: "2000", placeholder: "이 플레이의 배경과 줄거리를 적어주세요." });
+  const storyInput = el("textarea", { maxlength: "2000", placeholder: "전체 줄거리 요약. (만든 뒤 상세 페이지에서 '스토리 맵'으로 카드·연결을 추가할 수 있어요)" });
   storyInput.value = existing?.storyline || "";
   const visSelect = el("select");
   Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...((existing?.visibility || "public") === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
@@ -1332,7 +1359,7 @@ function openTemplateModal(existing) {
     body: [
       el("div", { class: "field" }, [el("label", { text: "템플릿 제목" }), nameInput]),
       el("div", { class: "field" }, [el("label", { text: "직업 카테고리 (이름·이미지·능력치)" }), job.wrap]),
-      el("div", { class: "field" }, [el("label", { text: "스토리 라인" }), storyInput]),
+      el("div", { class: "field" }, [el("label", { text: "스토리 요약" }), storyInput]),
       el("div", { class: "field" }, [el("label", { text: "공개 범위" }), visSelect]),
     ],
     actions: [
@@ -1375,6 +1402,185 @@ async function copyShareLink(hash) {
   const url = location.origin + location.pathname + hash;
   try { await navigator.clipboard.writeText(url); toast("공유 링크를 복사했습니다."); }
   catch { prompt("아래 링크를 복사하세요:", url); }
+}
+
+// ── 스토리 맵 (상세 카드 + 마인드맵) ──────────────────────────
+const SVGNS = "http://www.w3.org/2000/svg";
+function newNodeId() { return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+// 저장 데이터 → 노드 배열 (구버전 storyline 문자열도 단일 노드로 변환)
+function storyNodesFrom(data) {
+  const ns = Array.isArray(data?.storyNodes) ? data.storyNodes : null;
+  if (ns && ns.length) {
+    return ns.map((n, i) => ({
+      id: n.id || ("n" + i),
+      title: n.title || "",
+      body: n.body || "",
+      x: typeof n.x === "number" ? n.x : 40 + (i % 4) * 240,
+      y: typeof n.y === "number" ? n.y : 40 + Math.floor(i / 4) * 200,
+      links: Array.isArray(n.links) ? n.links.filter(Boolean) : [],
+    }));
+  }
+  if (data && data.storyline) return [{ id: "n0", title: "스토리", body: data.storyline, x: 40, y: 40, links: [] }];
+  return [];
+}
+
+function drawStoryLines(svg, nodes, elsById) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const seen = new Set();
+  nodes.forEach((n) => (n.links || []).forEach((tid) => {
+    const a = elsById[n.id], b = elsById[tid];
+    if (!a || !b) return;
+    const key = [n.id, tid].sort().join("|");
+    if (seen.has(key)) return; seen.add(key);
+    const line = document.createElementNS(SVGNS, "line");
+    line.setAttribute("class", "story-line");
+    line.setAttribute("x1", a.offsetLeft + a.offsetWidth / 2);
+    line.setAttribute("y1", a.offsetTop + a.offsetHeight / 2);
+    line.setAttribute("x2", b.offsetLeft + b.offsetWidth / 2);
+    line.setAttribute("y2", b.offsetTop + b.offsetHeight / 2);
+    svg.appendChild(line);
+  }));
+}
+
+// 읽기 전용 스토리 맵 뷰어
+function renderStoryViewer(container, nodes) {
+  container.innerHTML = "";
+  if (!nodes.length) { container.appendChild(el("div", { class: "card-sub", text: "작성된 스토리가 없습니다." })); return; }
+  const inner = el("div", { class: "story-canvas-inner" });
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "story-svg");
+  inner.appendChild(svg);
+  const elsById = {};
+  let maxX = 0, maxY = 0;
+  nodes.forEach((n) => {
+    const node = el("div", { class: "story-node", style: `left:${n.x}px;top:${n.y}px`,
+      onclick: () => openModal({ title: n.title || "스토리", body: [el("div", { class: "prose", text: n.body || "(상세 내용 없음)" })], actions: [el("button", { class: "btn btn-primary", onclick: closeModal }, "닫기")] }) }, [
+      el("div", { class: "story-node-title", text: n.title || "제목 없음" }),
+      n.body ? el("div", { class: "story-node-body", text: n.body }) : null,
+    ]);
+    elsById[n.id] = node; inner.appendChild(node);
+    maxX = Math.max(maxX, n.x + 220); maxY = Math.max(maxY, n.y + 160);
+  });
+  inner.style.width = Math.max(maxX, 600) + "px";
+  inner.style.height = Math.max(maxY, 340) + "px";
+  container.appendChild(el("div", { class: "story-viewbox" }, [inner]));
+  requestAnimationFrame(() => drawStoryLines(svg, nodes, elsById));
+}
+
+// 스토리 맵 편집기 (전체 화면 오버레이) — onSave(nodes) 가 false 를 반환하면 닫지 않음
+function openStoryEditor(initial, onSave) {
+  const nodes = storyNodesFrom({ storyNodes: initial }).map((n) => ({ ...n, links: [...(n.links || [])] }));
+  let connectFrom = null;
+
+  const inner = el("div", { class: "story-canvas-inner", style: "width:2000px;height:1400px" });
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "story-svg");
+  inner.appendChild(svg);
+  const canvas = el("div", { class: "story-canvas" }, [inner]);
+  const elsById = {};
+  const hint = el("div", { class: "story-hint" });
+
+  function setHint() {
+    hint.textContent = connectFrom
+      ? "🔗 연결할 다른 노드를 클릭하세요. (이미 연결돼 있으면 해제 · '연결'을 다시 누르면 취소)"
+      : "노드 제목 부분을 끌어 배치하고, '🔗 연결'로 노드를 잇고, '✏️'로 상세 내용을 작성하세요.";
+  }
+  function repaint() {
+    inner.querySelectorAll(".story-node").forEach((e) => e.remove());
+    Object.keys(elsById).forEach((k) => delete elsById[k]);
+    nodes.forEach((n) => inner.appendChild(makeNode(n)));
+    setHint();
+    requestAnimationFrame(() => drawStoryLines(svg, nodes, elsById));
+  }
+  function makeNode(n) {
+    const node = el("div", { class: "story-node editable" + (connectFrom === n.id ? " connect-source" : ""), style: `left:${n.x}px;top:${n.y}px` }, [
+      el("div", { class: "story-node-head" }, [el("div", { class: "story-node-title", text: n.title || "제목 없음" })]),
+      el("div", { class: "story-node-body" + (n.body ? "" : " empty"), text: n.body || "(상세 내용 없음)" }),
+      el("div", { class: "story-node-actions" }, [
+        el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); editNode(n); } }, "✏️"),
+        el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); connectFrom = (connectFrom === n.id ? null : n.id); repaint(); } }, "🔗 연결"),
+        el("button", { class: "btn btn-sm btn-danger", onclick: (e) => { e.stopPropagation(); delNode(n); } }, "✕"),
+      ]),
+    ]);
+    elsById[n.id] = node;
+    node.addEventListener("click", () => {
+      if (connectFrom && connectFrom !== n.id) { toggleLink(connectFrom, n.id); connectFrom = null; repaint(); }
+    });
+    node.querySelector(".story-node-head").addEventListener("pointerdown", (e) => startDrag(e, n, node));
+    return node;
+  }
+  function startDrag(e, n, node) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const gx = (e.clientX - rect.left + canvas.scrollLeft) - node.offsetLeft;
+    const gy = (e.clientY - rect.top + canvas.scrollTop) - node.offsetTop;
+    function move(ev) {
+      n.x = Math.max(0, Math.round(ev.clientX - rect.left + canvas.scrollLeft - gx));
+      n.y = Math.max(0, Math.round(ev.clientY - rect.top + canvas.scrollTop - gy));
+      node.style.left = n.x + "px"; node.style.top = n.y + "px";
+      drawStoryLines(svg, nodes, elsById);
+    }
+    function up() { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); }
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  }
+  function toggleLink(a, b) {
+    const na = nodes.find((x) => x.id === a); if (!na) return;
+    na.links = na.links || [];
+    const i = na.links.indexOf(b);
+    if (i >= 0) na.links.splice(i, 1); else na.links.push(b);
+    const nb = nodes.find((x) => x.id === b);
+    if (nb && nb.links) { const j = nb.links.indexOf(a); if (j >= 0) nb.links.splice(j, 1); }
+  }
+  function delNode(n) {
+    const idx = nodes.indexOf(n); if (idx >= 0) nodes.splice(idx, 1);
+    nodes.forEach((x) => (x.links = (x.links || []).filter((l) => l !== n.id)));
+    if (connectFrom === n.id) connectFrom = null;
+    repaint();
+  }
+  function editNode(n) {
+    const titleIn = el("input", { type: "text", maxlength: "60", value: n.title || "", placeholder: "노드 제목 (예: 1막 — 의뢰)" });
+    const bodyIn = el("textarea", { maxlength: "2000", placeholder: "이 장면/단서의 상세 내용을 작성하세요." });
+    bodyIn.value = n.body || "";
+    openModal({
+      title: "스토리 노드 편집", wide: true,
+      body: [
+        el("div", { class: "field" }, [el("label", { text: "제목" }), titleIn]),
+        el("div", { class: "field" }, [el("label", { text: "상세 내용" }), bodyIn]),
+      ],
+      actions: [
+        el("button", { class: "btn btn-ghost", onclick: closeModal }, "취소"),
+        el("button", { class: "btn btn-primary", onclick: () => { n.title = titleIn.value.trim(); n.body = bodyIn.value.trim(); closeModal(); repaint(); } }, "확인"),
+      ],
+    });
+    setTimeout(() => titleIn.focus(), 50);
+  }
+  function addNode() {
+    const n = { id: newNodeId(), title: "새 장면", body: "", x: canvas.scrollLeft + 40, y: canvas.scrollTop + 40, links: [] };
+    nodes.push(n); repaint(); editNode(n);
+  }
+
+  const overlay = el("div", { class: "story-overlay" }, [
+    el("div", { class: "story-overlay-head" }, [
+      el("h3", { text: "🧠 스토리 맵 편집" }),
+      el("button", { class: "btn btn-sm", onclick: addNode }, "＋ 노드 추가"),
+      el("button", { class: "btn btn-sm btn-primary", onclick: async () => {
+        const out = nodes.map((n) => ({ id: n.id, title: (n.title || "").trim(), body: (n.body || "").trim(), x: n.x, y: n.y, links: (n.links || []).filter((l) => nodes.some((m) => m.id === l)) }));
+        const ok = await onSave(out);
+        if (ok !== false) close();
+      } }, "저장"),
+      el("button", { class: "btn btn-sm btn-ghost", onclick: () => close() }, "닫기"),
+    ]),
+    hint,
+    canvas,
+  ]);
+  function close() { document.removeEventListener("keydown", esc); overlay.remove(); }
+  function esc(e) { if (e.key === "Escape" && !$("#modalBackdrop")) close(); }
+  document.addEventListener("keydown", esc);
+  document.body.appendChild(overlay);
+  repaint();
 }
 
 // ── 모달 시스템 ────────────────────────────────────────────────

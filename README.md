@@ -16,7 +16,8 @@ GM은 캠페인을 모집하고 세션을 기록하며, 플레이어는 신청�
 - **세션 / 캠페인 기록** — 회차별 일지(제목·날짜·참석자·요약)를 누적 기록
 - **실시간 플레이 도구** — `2d6+3`, `d20` 같은 주사위 표기 + 빠른 버튼으로 굴리고, 결과·채팅이 `onSnapshot`으로 즉시 공유
 - **캐릭터 시트 관리** — 능력치(자유 구성) · HP · 인벤토리 · 스킬 · 배경 · 메모. 캠페인에 연결 가능
-- **플레이 설정 템플릿** — 제목·직업 카테고리·스토리 라인으로 간단히 정리 → 캠페인을 열 때 그대로 불러오기
+- **플레이 설정 템플릿** — 제목·직업 카테고리·스토리로 정리 → 캠페인을 열 때 그대로 불러오기
+- **스토리 맵 (카드 + 마인드맵)** — 장면·단서를 상세 카드로 작성하고 노드를 드래그·연결해, GM은 흐름을 한눈에 보고 플레이어는 이야기를 따라가기 쉽게
 - **공개 범위 설정** — 공개 / 링크 공개 / 비공개 (캠페인·캐릭터·템플릿 각각)
 - **공유 링크** — 캠페인·캐릭터·템플릿 URL을 복사해 공유
 
@@ -112,7 +113,10 @@ templates/{templateId}                # 플레이 설정 템플릿
   jobCategories: [                     # 직업 카드 목록
     { name, image, stats }             #  이름 · 이미지(업로드 data URL 또는 URL) · 능력치
   ]
-  storyline                            # 스토리 라인
+  storyline                            # 스토리 요약(텍스트)
+  storyNodes: [                        # 스토리 맵(마인드맵 노드)
+    { id, title, body, x, y, links }   #  제목 · 상세 · 위치 · 연결된 노드 id 목록
+  ]
   visibility, createdAt, updatedAt
 
 characters/{characterId}              # 캐릭터 시트
@@ -126,6 +130,7 @@ campaigns/{campaignId}                # 캠페인(모집 + 기록)
   gmUid, gmName, gmPhoto
   title, system, description, schedule, maxPlayers
   jobCategories: [{ name, image, stats }]   # 직업 카드 (신청 시 이름으로 선택)
+  storyNodes: [{ id, title, body, x, y, links }]  # 스토리 맵 (템플릿에서 복사 / GM 편집)
   status: "recruiting" | "playing" | "done"
   visibility: "public" | "unlisted" | "private"
   memberUids: [uid, ...]              # 참여 멤버(GM 포함)
