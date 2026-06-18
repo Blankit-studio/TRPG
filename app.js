@@ -409,14 +409,14 @@ function characterCard(data) {
 function templateCard(data) {
   return el("div", { class: "card", onclick: () => (location.hash = "#/t/" + encodeURIComponent(data.id)) }, [
     el("div", { class: "card-top" }, [
-      el("span", { class: "tag", text: data.system || "자작" }),
+      el("span", { class: "tag", text: "📜 템플릿" }),
       el("span", { class: "card-sub", text: VISIBILITY[data.visibility]?.label || "공개" }),
     ]),
     el("div", { class: "card-name", text: data.name || "이름 없는 템플릿" }),
-    data.description ? el("div", { class: "card-desc", text: data.description }) : null,
+    data.storyline ? el("div", { class: "card-desc", text: data.storyline }) : null,
     el("div", { class: "card-foot" }, [
-      el("span", { class: "card-sub", html: `🎯 능력치 <b>${(data.statFields || []).length}</b>개` }),
-      el("span", { class: "card-sub", text: "GM " + (data.ownerName || "익명") }),
+      el("span", { class: "card-sub", html: `🧰 직업 <b>${(data.jobCategories || []).length}</b>종` }),
+      el("span", { class: "card-sub", text: "제작 " + (data.ownerName || "익명") }),
     ]),
   ]);
 }
@@ -874,7 +874,7 @@ async function renderTemplates(view) {
   view.appendChild(
     el("section", { class: "hero compact" }, [
       el("h1", { text: "플레이 설정 템플릿" }),
-      el("p", { text: "시스템과 능력치 구성을 템플릿으로 저장해 두면, 캐릭터 시트를 만들 때 그대로 불러올 수 있습니다." }),
+      el("p", { text: "제목·직업 카테고리·스토리 라인을 템플릿으로 저장해 두면, 캠페인을 열 때 그대로 불러올 수 있습니다." }),
       isMember()
         ? el("button", { class: "btn btn-primary", onclick: () => openTemplateModal() }, "＋ 템플릿 만들기")
         : el("button", { class: "btn btn-google", onclick: doLogin }, [googleIcon(), "로그인하고 만들기"]),
@@ -910,7 +910,7 @@ function renderTemplate(view, id) {
     wrap.innerHTML = "";
 
     const actions = el("div", { class: "schedule-actions" });
-    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCharacterModal({ templateId: id, system: data.system, _template: data }) }, "🧙 이 템플릿으로 캐릭터 만들기"));
+    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, description: campaignTextFromTemplate(data) }) }, "🎲 이 설정으로 캠페인 열기"));
     if (isOwner) {
       actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => openTemplateModal(data) }, "✏️ 편집"));
       actions.appendChild(el("button", { class: "btn btn-sm btn-danger", onclick: () => deleteTemplate(id, data.ownerUid) }, "삭제"));
@@ -919,19 +919,19 @@ function renderTemplate(view, id) {
 
     wrap.appendChild(el("div", { class: "detail-head" }, [
       el("div", { class: "grow" }, [
-        el("div", { class: "card-top" }, [el("span", { class: "tag", text: data.system || "자작" }), el("span", { class: "card-sub", text: VISIBILITY[data.visibility]?.label || "공개" })]),
+        el("div", { class: "card-top" }, [el("span", { class: "tag", text: "📜 템플릿" }), el("span", { class: "card-sub", text: VISIBILITY[data.visibility]?.label || "공개" })]),
         el("h2", { class: "detail-title", text: data.name || "이름 없는 템플릿" }),
         el("div", { class: "owner-line" }, [el("span", { text: "제작 " + (data.ownerName || "익명") })]),
       ]),
       actions,
     ]));
-    if (data.description) { wrap.appendChild(el("h3", { class: "block-title", text: "설명" })); wrap.appendChild(el("div", { class: "prose", text: data.description })); }
-    wrap.appendChild(el("h3", { class: "block-title", text: "능력치 구성" }));
+    wrap.appendChild(el("h3", { class: "block-title", text: "🧰 직업 카테고리" }));
     const chips = el("div", { class: "member-list" });
-    (data.statFields || []).forEach((f) => chips.appendChild(el("span", { class: "stat-chip", text: f })));
-    if (!(data.statFields || []).length) chips.appendChild(el("div", { class: "card-sub", text: "정의된 능력치 없음" }));
+    (data.jobCategories || []).forEach((f) => chips.appendChild(el("span", { class: "stat-chip", text: f })));
+    if (!(data.jobCategories || []).length) chips.appendChild(el("div", { class: "card-sub", text: "등록된 직업 카테고리 없음" }));
     wrap.appendChild(chips);
-    if (data.defaultDice) { wrap.appendChild(el("h3", { class: "block-title", text: "기본 판정 주사위" })); wrap.appendChild(el("div", { class: "prose", text: data.defaultDice })); }
+    wrap.appendChild(el("h3", { class: "block-title", text: "📖 스토리 라인" }));
+    wrap.appendChild(el("div", { class: "prose", text: data.storyline || "작성된 스토리 라인이 없습니다." }));
   }).catch((e) => { console.error(e); wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "불러오지 못했습니다." })); });
 }
 async function deleteTemplate(id, ownerUid) {
@@ -941,15 +941,23 @@ async function deleteTemplate(id, ownerUid) {
   catch (e) { console.error(e); toast("삭제 실패: " + (e.code || e.message), true); }
 }
 
+// 템플릿(직업 카테고리 + 스토리 라인)을 캠페인 소개 텍스트로 변환
+function campaignTextFromTemplate(tpl) {
+  const parts = [];
+  if (tpl.storyline) parts.push(tpl.storyline);
+  if ((tpl.jobCategories || []).length) parts.push("🧰 직업 카테고리: " + tpl.jobCategories.join(", "));
+  return parts.join("\n\n");
+}
+
 // ── 모달: 캠페인 생성/수정 ────────────────────────────────────
-function openCampaignModal(existing) {
+function openCampaignModal(existing, prefill) {
   if (!isMember()) { toast("캠페인을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
   const isEdit = !!existing;
-  const titleInput = el("input", { type: "text", maxlength: "60", value: existing?.title || "", placeholder: "예: 인스머스의 그림자 (CoC 시나리오)" });
-  const systemInput = el("input", { type: "text", maxlength: "40", value: existing?.system || "", placeholder: "예: 크툴루의 부름(CoC)", list: "systemList" });
+  const titleInput = el("input", { type: "text", maxlength: "60", value: existing?.title || prefill?.title || "", placeholder: "예: 인스머스의 그림자 (CoC 시나리오)" });
+  const systemInput = el("input", { type: "text", maxlength: "40", value: existing?.system || prefill?.system || "", placeholder: "예: 크툴루의 부름(CoC)", list: "systemList" });
   const datalist = el("datalist", { id: "systemList" }, SYSTEMS.map((s) => el("option", { value: s })));
   const descInput = el("textarea", { maxlength: "1000", placeholder: "시나리오 소개, 분위기, 진행 방식, 주의사항 등" });
-  descInput.value = existing?.description || "";
+  descInput.value = existing?.description || prefill?.description || "";
   const scheduleInput = el("input", { type: "text", maxlength: "60", value: existing?.schedule || "", placeholder: "예: 매주 토요일 20:00, 온라인" });
   const maxInput = el("input", { type: "number", min: "1", max: "12", value: existing?.maxPlayers || 4 });
 
@@ -1064,12 +1072,10 @@ function openSessionModal(campaignId, defaultNo, existing) {
 function openCharacterModal(opts = {}) {
   if (!isMember()) { toast("캐릭터를 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
   const existing = opts.id ? opts : null;
-  const tpl = opts._template || null;
 
-  // 능력치 행: 템플릿 → 기존 → 기본 프리셋 순으로 시드
+  // 능력치 행: 기존 → 기본 프리셋 순으로 시드
   let statRows;
   if (existing?.stats?.length) statRows = existing.stats.map((s) => ({ k: s.k, v: s.v }));
-  else if (tpl?.statFields?.length) statRows = tpl.statFields.map((k) => ({ k, v: "" }));
   else statRows = DEFAULT_STATS.map((k) => ({ k, v: "" }));
 
   const emojiPick = el("div", { class: "emoji-picker" });
@@ -1117,7 +1123,7 @@ function openCharacterModal(opts = {}) {
 
   openModal({
     title: existing ? "캐릭터 시트 편집" : "캐릭터 만들기",
-    sub: tpl ? `"${tpl.name}" 템플릿의 능력치 구성을 불러왔습니다.` : "능력치·인벤토리·스킬을 자유롭게 구성하세요.",
+    sub: "능력치·인벤토리·스킬을 자유롭게 구성하세요.",
     wide: true,
     body: [
       datalist,
@@ -1185,42 +1191,34 @@ function openCharacterModal(opts = {}) {
 // ── 모달: 템플릿 생성/수정 ────────────────────────────────────
 function openTemplateModal(existing) {
   if (!isMember()) { toast("템플릿을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
-  const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: CoC 7판 기본 시트" });
-  const systemInput = el("input", { type: "text", maxlength: "40", value: existing?.system || "", placeholder: "예: 크툴루의 부름(CoC)", list: "systemList3" });
-  const datalist = el("datalist", { id: "systemList3" }, SYSTEMS.map((s) => el("option", { value: s })));
-  const descInput = el("textarea", { maxlength: "800", placeholder: "이 템플릿의 설명 / 사용법" });
-  descInput.value = existing?.description || "";
-  const statsInput = el("textarea", { maxlength: "500", placeholder: "쉼표 또는 줄바꿈으로 구분. 예: 근력, 민첩, 건강, 지능, 정신력, 외형" });
-  statsInput.value = (existing?.statFields || []).join(", ");
-  const diceInput = el("input", { type: "text", maxlength: "30", value: existing?.defaultDice || "", placeholder: "예: 1d100, 3d6" });
+  const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: 인스머스의 그림자" });
+  const jobInput = el("textarea", { maxlength: "300", placeholder: "쉼표 또는 줄바꿈으로 구분. 예: 탐정, 기자, 의사, 어부" });
+  jobInput.value = (existing?.jobCategories || []).join(", ");
+  const storyInput = el("textarea", { maxlength: "2000", placeholder: "이 플레이의 배경과 줄거리를 적어주세요." });
+  storyInput.value = existing?.storyline || "";
   const visSelect = el("select");
   Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...((existing?.visibility || "public") === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
 
   openModal({
     title: existing ? "템플릿 편집" : "템플릿 만들기",
-    sub: "시스템과 능력치 구성을 저장해 두면 캐릭터 시트를 빠르게 만들 수 있어요.",
+    sub: "플레이 설정을 제목·직업 카테고리·스토리 라인으로 간단히 정리하세요.",
     body: [
-      datalist,
-      el("div", { class: "field" }, [el("label", { text: "템플릿 이름" }), nameInput]),
-      el("div", { class: "field" }, [el("label", { text: "시스템 / 룰" }), systemInput]),
-      el("div", { class: "field" }, [el("label", { text: "설명" }), descInput]),
-      el("div", { class: "field" }, [el("label", { text: "능력치 목록" }), statsInput]),
-      el("div", { class: "field" }, [el("label", { text: "기본 판정 주사위 (선택)" }), diceInput]),
+      el("div", { class: "field" }, [el("label", { text: "템플릿 제목" }), nameInput]),
+      el("div", { class: "field" }, [el("label", { text: "직업 카테고리" }), jobInput]),
+      el("div", { class: "field" }, [el("label", { text: "스토리 라인" }), storyInput]),
       el("div", { class: "field" }, [el("label", { text: "공개 범위" }), visSelect]),
     ],
     actions: [
       el("button", { class: "btn btn-ghost", onclick: closeModal }, "취소"),
       el("button", { class: "btn btn-primary", onclick: async () => {
         const name = nameInput.value.trim();
-        if (!name) { toast("템플릿 이름을 입력하세요.", true); return; }
-        const statFields = statsInput.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 40);
+        if (!name) { toast("템플릿 제목을 입력하세요.", true); return; }
+        const jobCategories = jobInput.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 40);
         const meInfo = me();
         const payload = {
           name,
-          system: systemInput.value.trim(),
-          description: descInput.value.trim(),
-          statFields,
-          defaultDice: diceInput.value.trim(),
+          jobCategories,
+          storyline: storyInput.value.trim(),
           visibility: visSelect.value,
           updatedAt: serverTimestamp(),
         };
