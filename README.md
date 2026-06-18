@@ -55,14 +55,11 @@ export const firebaseConfig = {
 
 > 일부 목록 조회는 단일 필드 인덱스로 동작합니다. 콘솔에서 인덱스 생성 안내가 뜨면 링크를 눌러 생성하세요.
 
-### 5. Storage 만들기 & 보안 규칙 적용 (직업 이미지 업로드용)
-1. **Storage** → **시작하기** 로 기본 버킷 생성 (프로덕션 모드)
-2. **규칙(Rules)** 탭으로 이동
-3. 이 저장소의 [`storage.rules`](./storage.rules) 내용을 붙여넣고 **게시**
+> 💡 직업 카드 이미지는 별도 Storage 없이 동작합니다. 파일을 선택하면 브라우저에서
+> 작게 리사이즈해 Firestore 문서에 인라인 저장하므로, **무료(Spark) 요금제에서도** 사용할 수 있습니다.
+> (이미지 URL을 직접 붙여넣는 것도 지원합니다.)
 
-> 직업 카드 이미지는 `job-images/{uid}/` 경로에 업로드됩니다. 이미지 URL을 직접 붙여넣어도 됩니다.
-
-### 6. 승인된 도메인 등록
+### 5. 승인된 도메인 등록
 - **Authentication → Settings → 승인된 도메인**에 사이트를 띄울 도메인 추가
   - 로컬 테스트: `localhost`
   - 배포 시: 예) `내아이디.github.io` 또는 Firebase Hosting 도메인
@@ -113,7 +110,7 @@ templates/{templateId}                # 플레이 설정 템플릿
   ownerUid, ownerName, ownerPhoto
   name                                 # 템플릿 제목
   jobCategories: [                     # 직업 카드 목록
-    { name, image, stats }             #  직업 이름 · 캐릭터 이미지 URL · 능력치
+    { name, image, stats }             #  이름 · 이미지(업로드 data URL 또는 URL) · 능력치
   ]
   storyline                            # 스토리 라인
   visibility, createdAt, updatedAt
@@ -164,7 +161,6 @@ campaigns/{campaignId}                # 캠페인(모집 + 기록)
 | `app.js` | 앱 로직 (인증·라우팅·캠페인·세션·캐릭터·템플릿·실시간 주사위) |
 | `firebase-config.js` | **본인 Firebase 설정값 입력** |
 | `firestore.rules` | Firestore 보안 규칙 |
-| `storage.rules` | Storage 보안 규칙 (직업 이미지 업로드) |
 
 ---
 

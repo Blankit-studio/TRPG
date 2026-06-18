@@ -11,9 +11,6 @@ import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion,
   collection, getDocs, onSnapshot, serverTimestamp, query, where, orderBy, limit,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
 // ── 상수 ───────────────────────────────────────────────────────
 const SYSTEMS = ["크툴루의 부름(CoC)", "던전 앤 드래곤(D&D 5e)", "패스파인더", "사이버펑크 RED", "메이지", "워해머", "자작/기타"];
@@ -40,7 +37,7 @@ const APP_STATUS = {
 const DEFAULT_STATS = ["근력", "민첩", "건강", "지능", "정신력", "외형"];
 
 // ── 전역 상태 ──────────────────────────────────────────────────
-let app, auth, db, storage;
+let app, auth, db;
 let currentUser = null;
 let userProfile = null;
 const subs = [];            // 현재 화면의 onSnapshot 해제 함수들
@@ -85,27 +82,33 @@ function jobCardView(job) {
   ]);
 }
 
-// 직업 캐릭터 이미지 업로드 → Storage 다운로드 URL 반환
-async function uploadJobImage(file) {
-  if (!storage || !currentUser) { toast("로그인이 필요합니다.", true); return null; }
-  if (!file.type.startsWith("image/")) { toast("이미지 파일만 업로드할 수 있어요.", true); return null; }
-  if (file.size > 5 * 1024 * 1024) { toast("이미지는 5MB 이하만 가능합니다.", true); return null; }
-  const safe = file.name.replace(/[^\w.\-]/g, "_");
-  const path = `job-images/${currentUser.uid}/${Date.now()}_${safe}`;
-  try {
-    const r = storageRef(storage, path);
-    await uploadBytes(r, file, { contentType: file.type });
-    return await getDownloadURL(r);
-  } catch (e) {
-    console.error(e);
-    const msg = e.code === "storage/unauthorized"
-      ? "업로드 권한이 없습니다. Storage 보안 규칙(storage.rules)을 적용했는지 확인하세요."
-      : (e.code === "storage/unknown" || e.code === "storage/retry-limit-exceeded")
-      ? "업로드 실패. Firebase 콘솔에서 Storage를 활성화했는지 확인하세요."
-      : (e.code || e.message);
-    toast("이미지 업로드 실패: " + msg, true);
-    return null;
-  }
+// 선택한 이미지 파일을 브라우저에서 작게 리사이즈 → data URL 반환
+// (Firebase Storage 없이 Firestore 문서에 인라인 저장 — 무료 요금제에서 동작)
+function fileToResizedDataURL(file, maxSize = 256, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) return reject(new Error("이미지 파일만 추가할 수 있어요."));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w >= h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else if (h > w && h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        // WebP(투명도 유지·용량 작음) 우선, 미지원 시 자동으로 PNG
+        let out = canvas.toDataURL("image/webp", quality);
+        if (!out.startsWith("data:image/webp")) out = canvas.toDataURL("image/jpeg", quality);
+        if (out.length > 200 * 1024) out = canvas.toDataURL("image/jpeg", 0.6); // 과대 시 한 번 더 압축
+        resolve(out);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 // 직업 카드 편집기 — 이름·이미지(업로드/URL)·능력치 작성. { wrap, getJobs } 반환.
@@ -116,6 +119,7 @@ function jobEditor(initial = []) {
   const addBtn = el("button", { type: "button", class: "btn btn-sm", style: "align-self:flex-start", onclick: () => { jobs.push({ name: "", image: "", stats: "" }); render(); list.querySelectorAll(".job-name").forEach((n, i, a) => { if (i === a.length - 1) n.focus(); }); } }, "＋ 직업 추가");
   wrap.append(list, addBtn);
 
+  const isData = (s) => (s || "").startsWith("data:");
   function render() {
     list.innerHTML = "";
     jobs.forEach((job, i) => {
@@ -123,11 +127,12 @@ function jobEditor(initial = []) {
       const setPreview = () => { preview.src = (job.image || "").trim() || fallbackAvatar(job.name || "?"); };
       preview.addEventListener("error", () => { preview.onerror = null; preview.src = fallbackAvatar(job.name || "?"); });
       const nameIn = el("input", { type: "text", maxlength: "30", value: job.name, placeholder: "직업 이름 (예: 탐정)", class: "job-name" });
-      const imgIn = el("input", { type: "text", maxlength: "500", value: job.image, placeholder: "이미지 URL (또는 아래 버튼으로 업로드)" });
+      const imgIn = el("input", { type: "text", maxlength: "1000", value: isData(job.image) ? "" : (job.image || "") });
+      const setImgPlaceholder = () => { imgIn.placeholder = isData(job.image) ? "업로드한 이미지 사용 중 · URL 입력 시 대체" : "이미지 URL (또는 아래 버튼으로 업로드)"; };
       const statsIn = el("textarea", { maxlength: "500", placeholder: "직업 능력치 / 설명 (예: 추리 70, 심리학 50, 권총)" });
       statsIn.value = job.stats;
       const fileInput = el("input", { type: "file", accept: "image/*", style: "display:none" });
-      const uploadBtn = el("button", { type: "button", class: "btn btn-sm", onclick: () => fileInput.click() }, "🖼️ 이미지 업로드");
+      const uploadBtn = el("button", { type: "button", class: "btn btn-sm", onclick: () => fileInput.click() }, "🖼️ 파일 선택");
       nameIn.addEventListener("input", () => { job.name = nameIn.value; if (!(job.image || "").trim()) setPreview(); });
       imgIn.addEventListener("input", () => { job.image = imgIn.value; setPreview(); });
       statsIn.addEventListener("input", () => { job.stats = statsIn.value; });
@@ -136,13 +141,17 @@ function jobEditor(initial = []) {
         if (!file) return;
         uploadBtn.disabled = true;
         const orig = uploadBtn.textContent;
-        uploadBtn.textContent = "업로드 중…";
-        const url = await uploadJobImage(file);
+        uploadBtn.textContent = "처리 중…";
+        try {
+          const dataUrl = await fileToResizedDataURL(file);
+          job.image = dataUrl; imgIn.value = ""; setImgPlaceholder(); setPreview();
+          toast("이미지를 추가했습니다.");
+        } catch (e) { toast(e.message || "이미지 처리 실패", true); }
         uploadBtn.disabled = false;
         uploadBtn.textContent = orig;
         fileInput.value = "";
-        if (url) { job.image = url; imgIn.value = url; setPreview(); toast("이미지를 업로드했습니다."); }
       });
+      setImgPlaceholder();
       setPreview();
       list.appendChild(el("div", { class: "job-card-edit" }, [
         el("div", { class: "job-card-top" }, [
@@ -207,7 +216,6 @@ function boot() {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    storage = getStorage(app);
   } catch (e) {
     console.error(e);
     $("#configBanner").hidden = false;

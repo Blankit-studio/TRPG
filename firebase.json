@@ -7,11 +7,7 @@
       "**/.*",
       "**/node_modules/**",
       "README.md",
-      "firestore.rules",
-      "storage.rules"
+      "firestore.rules"
     ]
-  },
-  "storage": {
-    "rules": "storage.rules"
   }
 }
