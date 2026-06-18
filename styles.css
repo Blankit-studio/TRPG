@@ -280,6 +280,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: inherit; width: 100%;
 }
 .job-card-edit textarea { resize: vertical; min-height: 52px; }
+.job-upload-row { display: flex; gap: 8px; align-items: center; }
 .job-card-edit input::placeholder, .job-card-edit textarea::placeholder { color: rgba(255, 255, 255, 0.4); }
 .job-card-edit input:focus, .job-card-edit textarea:focus { outline: none; border-color: var(--blue); }
 .job-name { font-weight: 700; }

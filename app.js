@@ -11,6 +11,9 @@ import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion,
   collection, getDocs, onSnapshot, serverTimestamp, query, where, orderBy, limit,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
 // ── 상수 ───────────────────────────────────────────────────────
 const SYSTEMS = ["크툴루의 부름(CoC)", "던전 앤 드래곤(D&D 5e)", "패스파인더", "사이버펑크 RED", "메이지", "워해머", "자작/기타"];
@@ -37,7 +40,7 @@ const APP_STATUS = {
 const DEFAULT_STATS = ["근력", "민첩", "건강", "지능", "정신력", "외형"];
 
 // ── 전역 상태 ──────────────────────────────────────────────────
-let app, auth, db;
+let app, auth, db, storage;
 let currentUser = null;
 let userProfile = null;
 const subs = [];            // 현재 화면의 onSnapshot 해제 함수들
@@ -82,7 +85,30 @@ function jobCardView(job) {
   ]);
 }
 
-// 직업 카드 편집기 — 이름·이미지 URL·능력치 작성. { wrap, getJobs } 반환.
+// 직업 캐릭터 이미지 업로드 → Storage 다운로드 URL 반환
+async function uploadJobImage(file) {
+  if (!storage || !currentUser) { toast("로그인이 필요합니다.", true); return null; }
+  if (!file.type.startsWith("image/")) { toast("이미지 파일만 업로드할 수 있어요.", true); return null; }
+  if (file.size > 5 * 1024 * 1024) { toast("이미지는 5MB 이하만 가능합니다.", true); return null; }
+  const safe = file.name.replace(/[^\w.\-]/g, "_");
+  const path = `job-images/${currentUser.uid}/${Date.now()}_${safe}`;
+  try {
+    const r = storageRef(storage, path);
+    await uploadBytes(r, file, { contentType: file.type });
+    return await getDownloadURL(r);
+  } catch (e) {
+    console.error(e);
+    const msg = e.code === "storage/unauthorized"
+      ? "업로드 권한이 없습니다. Storage 보안 규칙(storage.rules)을 적용했는지 확인하세요."
+      : (e.code === "storage/unknown" || e.code === "storage/retry-limit-exceeded")
+      ? "업로드 실패. Firebase 콘솔에서 Storage를 활성화했는지 확인하세요."
+      : (e.code || e.message);
+    toast("이미지 업로드 실패: " + msg, true);
+    return null;
+  }
+}
+
+// 직업 카드 편집기 — 이름·이미지(업로드/URL)·능력치 작성. { wrap, getJobs } 반환.
 function jobEditor(initial = []) {
   const jobs = normalizeJobs(initial).map((j) => ({ ...j }));
   const wrap = el("div", { class: "job-editor" });
@@ -97,17 +123,31 @@ function jobEditor(initial = []) {
       const setPreview = () => { preview.src = (job.image || "").trim() || fallbackAvatar(job.name || "?"); };
       preview.addEventListener("error", () => { preview.onerror = null; preview.src = fallbackAvatar(job.name || "?"); });
       const nameIn = el("input", { type: "text", maxlength: "30", value: job.name, placeholder: "직업 이름 (예: 탐정)", class: "job-name" });
-      const imgIn = el("input", { type: "text", maxlength: "500", value: job.image, placeholder: "캐릭터 이미지 URL (선택)" });
+      const imgIn = el("input", { type: "text", maxlength: "500", value: job.image, placeholder: "이미지 URL (또는 아래 버튼으로 업로드)" });
       const statsIn = el("textarea", { maxlength: "500", placeholder: "직업 능력치 / 설명 (예: 추리 70, 심리학 50, 권총)" });
       statsIn.value = job.stats;
+      const fileInput = el("input", { type: "file", accept: "image/*", style: "display:none" });
+      const uploadBtn = el("button", { type: "button", class: "btn btn-sm", onclick: () => fileInput.click() }, "🖼️ 이미지 업로드");
       nameIn.addEventListener("input", () => { job.name = nameIn.value; if (!(job.image || "").trim()) setPreview(); });
       imgIn.addEventListener("input", () => { job.image = imgIn.value; setPreview(); });
       statsIn.addEventListener("input", () => { job.stats = statsIn.value; });
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        uploadBtn.disabled = true;
+        const orig = uploadBtn.textContent;
+        uploadBtn.textContent = "업로드 중…";
+        const url = await uploadJobImage(file);
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = orig;
+        fileInput.value = "";
+        if (url) { job.image = url; imgIn.value = url; setPreview(); toast("이미지를 업로드했습니다."); }
+      });
       setPreview();
       list.appendChild(el("div", { class: "job-card-edit" }, [
         el("div", { class: "job-card-top" }, [
           preview,
-          el("div", { class: "grow" }, [nameIn, imgIn]),
+          el("div", { class: "grow" }, [nameIn, imgIn, el("div", { class: "job-upload-row" }, [uploadBtn, fileInput])]),
           el("button", { type: "button", class: "btn btn-sm btn-danger", onclick: () => { jobs.splice(i, 1); render(); } }, "✕"),
         ]),
         statsIn,
@@ -167,6 +207,7 @@ function boot() {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app);
   } catch (e) {
     console.error(e);
     $("#configBanner").hidden = false;
