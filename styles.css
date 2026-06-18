@@ -257,6 +257,23 @@ a { color: inherit; text-decoration: none; }
 .field select option { background: #0a0a0a; color: var(--text); }
 .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* ── 태그(칩) 입력 ── */
+.tag-input {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 7px 8px;
+}
+.tag-input:focus-within { border-color: var(--blue); }
+.tag-input-field { flex: 1; min-width: 90px; background: transparent; border: none; color: var(--text); font-size: 14px; font-family: inherit; padding: 3px; }
+.tag-input-field:focus { outline: none; }
+.tag-input-field::placeholder { color: rgba(255, 255, 255, 0.4); }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(0, 171, 252, 0.15); color: var(--blue); border: 1px solid var(--blue);
+  border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 13px; font-weight: 700;
+}
+.tag-x { background: transparent; border: none; color: var(--blue); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+.tag-x:hover { color: var(--white); }
+
 .emoji-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .emoji-opt { font-size: 18px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-soft); cursor: pointer; }
 .emoji-opt.selected { border-color: var(--blue); background: rgba(0, 171, 252, 0.2); }

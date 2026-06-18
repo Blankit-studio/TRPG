@@ -60,6 +60,38 @@ const el = (tag, props = {}, children = []) => {
   return node;
 };
 
+// 태그(칩) 입력 컴포넌트 — Enter/쉼표로 추가, ×로 삭제. { wrap, getTags } 반환.
+function tagInput(initial = [], placeholder = "입력 후 Enter…") {
+  const tags = [...initial];
+  const wrap = el("div", { class: "tag-input" });
+  const input = el("input", { type: "text", class: "tag-input-field", placeholder, maxlength: "24" });
+  function render() {
+    wrap.querySelectorAll(".tag-chip").forEach((n) => n.remove());
+    tags.forEach((t, i) => {
+      const chip = el("span", { class: "tag-chip" }, [
+        el("span", { text: t }),
+        el("button", { type: "button", class: "tag-x", onclick: () => { tags.splice(i, 1); render(); } }, "×"),
+      ]);
+      wrap.insertBefore(chip, input);
+    });
+  }
+  function add(val) {
+    (val || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean).forEach((v) => {
+      if (!tags.includes(v) && tags.length < 40) tags.push(v);
+    });
+    input.value = "";
+    render();
+  }
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(input.value); }
+    else if (e.key === "Backspace" && !input.value && tags.length) { tags.pop(); render(); }
+  });
+  input.addEventListener("blur", () => { if (input.value.trim()) add(input.value); });
+  wrap.appendChild(input);
+  render();
+  return { wrap, getTags: () => [...tags] };
+}
+
 function toast(msg, isError = false) {
   const t = $("#toast");
   t.textContent = msg;
@@ -502,7 +534,7 @@ function renderCampaign(view, id) {
         el("div", { class: "member-chip" }, [
           el("img", { class: "avatar avatar-sm", src: m.photo || fallbackAvatar(m.name), alt: "" }),
           el("span", { text: m.name || "익명" }),
-          m.uid === data.gmUid ? el("span", { class: "mini-badge", text: "GM" }) : null,
+          m.uid === data.gmUid ? el("span", { class: "mini-badge", text: "GM" }) : (m.job ? el("span", { class: "mini-badge", text: m.job }) : null),
         ])
       );
     });
@@ -627,7 +659,11 @@ function renderCampaign(view, id) {
         el("div", { class: "applicant-item" }, [
           el("img", { class: "avatar", src: a.byPhoto || fallbackAvatar(a.byName), alt: "" }),
           el("div", { class: "grow" }, [
-            el("div", { class: "row-gap" }, [el("span", { class: "who", text: a.byName || "익명" }), el("span", { class: "badge " + ap.cls, text: ap.label })]),
+            el("div", { class: "row-gap" }, [
+              el("span", { class: "who", text: a.byName || "익명" }),
+              el("span", { class: "badge " + ap.cls, text: ap.label }),
+              a.job ? el("span", { class: "mini-badge", text: a.job }) : null,
+            ]),
             a.characterName ? el("div", { class: "card-sub", text: "캐릭터: " + a.characterName }) : null,
             a.message ? el("div", { class: "note", text: a.message }) : null,
           ]),
@@ -646,11 +682,16 @@ function renderCampaign(view, id) {
   function openApplyModal() {
     const charInput = el("input", { type: "text", maxlength: "40", placeholder: "참여할 캐릭터 이름 (선택)" });
     const msgInput = el("textarea", { maxlength: "300", placeholder: "GM에게 한마디 (플레이 경험, 가능 시간 등)" });
+    const jobs = data.jobCategories || [];
+    const jobSelect = jobs.length
+      ? el("select", {}, [el("option", { value: "" }, "직업 선택 (선택 안 함)"), ...jobs.map((j) => el("option", { value: j }, j))])
+      : null;
     openModal({
       title: "참여 신청",
       sub: `"${data.title}" 캠페인에 참여를 신청합니다.`,
       body: [
         !isMember() ? el("div", { class: "mode-hint", style: "margin:0", text: "로그인 없이 게스트로도 신청할 수 있어요. (이름은 Google 계정 또는 게스트로 표시)" }) : null,
+        jobSelect ? el("div", { class: "field" }, [el("label", { text: "희망 직업" }), jobSelect]) : null,
         el("div", { class: "field" }, [el("label", { text: "캐릭터 이름" }), charInput]),
         el("div", { class: "field" }, [el("label", { text: "신청 메시지" }), msgInput]),
       ],
@@ -664,6 +705,7 @@ function renderCampaign(view, id) {
               byUid: user.uid,
               byName: user.displayName || "게스트",
               byPhoto: user.photoURL || "",
+              job: jobSelect ? jobSelect.value : "",
               characterName: charInput.value.trim(),
               message: msgInput.value.trim(),
               status: "pending",
@@ -684,7 +726,7 @@ function renderCampaign(view, id) {
     try {
       await updateDoc(doc(db, "campaigns", id), {
         memberUids: arrayUnion(a.byUid),
-        members: arrayUnion({ uid: a.byUid, name: a.byName || "익명", photo: a.byPhoto || "" }),
+        members: arrayUnion({ uid: a.byUid, name: a.byName || "익명", photo: a.byPhoto || "", job: a.job || "" }),
         updatedAt: serverTimestamp(),
       });
       await updateDoc(doc(db, "campaigns", id, "applications", a.id), { status: "accepted" });
@@ -910,7 +952,7 @@ function renderTemplate(view, id) {
     wrap.innerHTML = "";
 
     const actions = el("div", { class: "schedule-actions" });
-    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, description: campaignTextFromTemplate(data) }) }, "🎲 이 설정으로 캠페인 열기"));
+    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, description: data.storyline || "", jobCategories: data.jobCategories || [] }) }, "🎲 이 설정으로 캠페인 열기"));
     if (isOwner) {
       actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => openTemplateModal(data) }, "✏️ 편집"));
       actions.appendChild(el("button", { class: "btn btn-sm btn-danger", onclick: () => deleteTemplate(id, data.ownerUid) }, "삭제"));
@@ -941,14 +983,6 @@ async function deleteTemplate(id, ownerUid) {
   catch (e) { console.error(e); toast("삭제 실패: " + (e.code || e.message), true); }
 }
 
-// 템플릿(직업 카테고리 + 스토리 라인)을 캠페인 소개 텍스트로 변환
-function campaignTextFromTemplate(tpl) {
-  const parts = [];
-  if (tpl.storyline) parts.push(tpl.storyline);
-  if ((tpl.jobCategories || []).length) parts.push("🧰 직업 카테고리: " + tpl.jobCategories.join(", "));
-  return parts.join("\n\n");
-}
-
 // ── 모달: 캠페인 생성/수정 ────────────────────────────────────
 function openCampaignModal(existing, prefill) {
   if (!isMember()) { toast("캠페인을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
@@ -958,6 +992,7 @@ function openCampaignModal(existing, prefill) {
   const datalist = el("datalist", { id: "systemList" }, SYSTEMS.map((s) => el("option", { value: s })));
   const descInput = el("textarea", { maxlength: "1000", placeholder: "시나리오 소개, 분위기, 진행 방식, 주의사항 등" });
   descInput.value = existing?.description || prefill?.description || "";
+  const job = tagInput(existing?.jobCategories || prefill?.jobCategories || [], "예: 탐정 (입력 후 Enter)");
   const scheduleInput = el("input", { type: "text", maxlength: "60", value: existing?.schedule || "", placeholder: "예: 매주 토요일 20:00, 온라인" });
   const maxInput = el("input", { type: "number", min: "1", max: "12", value: existing?.maxPlayers || 4 });
 
@@ -974,6 +1009,7 @@ function openCampaignModal(existing, prefill) {
       el("div", { class: "field" }, [el("label", { text: "제목" }), titleInput]),
       el("div", { class: "field" }, [el("label", { text: "시스템 / 룰" }), systemInput]),
       el("div", { class: "field" }, [el("label", { text: "소개" }), descInput]),
+      el("div", { class: "field" }, [el("label", { text: "직업 카테고리 (플레이어가 신청 시 선택)" }), job.wrap]),
       el("div", { class: "form-row" }, [
         el("div", { class: "field grow" }, [el("label", { text: "일정" }), scheduleInput]),
         el("div", { class: "field", style: "width:110px" }, [el("label", { text: "정원" }), maxInput]),
@@ -992,6 +1028,7 @@ function openCampaignModal(existing, prefill) {
           title,
           system: systemInput.value.trim(),
           description: descInput.value.trim(),
+          jobCategories: job.getTags(),
           schedule: scheduleInput.value.trim(),
           maxPlayers: Math.max(1, parseInt(maxInput.value, 10) || 1),
           status: statusSelect.value,
@@ -1192,8 +1229,7 @@ function openCharacterModal(opts = {}) {
 function openTemplateModal(existing) {
   if (!isMember()) { toast("템플릿을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
   const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: 인스머스의 그림자" });
-  const jobInput = el("textarea", { maxlength: "300", placeholder: "쉼표 또는 줄바꿈으로 구분. 예: 탐정, 기자, 의사, 어부" });
-  jobInput.value = (existing?.jobCategories || []).join(", ");
+  const job = tagInput(existing?.jobCategories || [], "예: 탐정 (입력 후 Enter)");
   const storyInput = el("textarea", { maxlength: "2000", placeholder: "이 플레이의 배경과 줄거리를 적어주세요." });
   storyInput.value = existing?.storyline || "";
   const visSelect = el("select");
@@ -1204,7 +1240,7 @@ function openTemplateModal(existing) {
     sub: "플레이 설정을 제목·직업 카테고리·스토리 라인으로 간단히 정리하세요.",
     body: [
       el("div", { class: "field" }, [el("label", { text: "템플릿 제목" }), nameInput]),
-      el("div", { class: "field" }, [el("label", { text: "직업 카테고리" }), jobInput]),
+      el("div", { class: "field" }, [el("label", { text: "직업 카테고리" }), job.wrap]),
       el("div", { class: "field" }, [el("label", { text: "스토리 라인" }), storyInput]),
       el("div", { class: "field" }, [el("label", { text: "공개 범위" }), visSelect]),
     ],
@@ -1213,7 +1249,7 @@ function openTemplateModal(existing) {
       el("button", { class: "btn btn-primary", onclick: async () => {
         const name = nameInput.value.trim();
         if (!name) { toast("템플릿 제목을 입력하세요.", true); return; }
-        const jobCategories = jobInput.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 40);
+        const jobCategories = job.getTags();
         const meInfo = me();
         const payload = {
           name,

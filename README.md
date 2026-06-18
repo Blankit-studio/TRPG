@@ -119,17 +119,18 @@ characters/{characterId}              # 캐릭터 시트
 campaigns/{campaignId}                # 캠페인(모집 + 기록)
   gmUid, gmName, gmPhoto
   title, system, description, schedule, maxPlayers
+  jobCategories: ["탐정","기자",...]   # 신청 시 선택할 직업 카테고리
   status: "recruiting" | "playing" | "done"
   visibility: "public" | "unlisted" | "private"
   memberUids: [uid, ...]              # 참여 멤버(GM 포함)
-  members: [{ uid, name, photo }]
+  members: [{ uid, name, photo, job }]
   updatedAt
   │
   ├─ sessions/{sessionId}             # 세션 기록 (GM 작성)
   │    no, title, date, attendees, summary
   │
   ├─ applications/{applicantUid}      # 모집 신청 (1인 1신청)
-  │    byUid, byName, byPhoto, characterName, message, status
+  │    byUid, byName, byPhoto, job, characterName, message, status
   │
   └─ rolls/{rollId}                   # 실시간 플레이 로그
        type: "roll" | "chat"
