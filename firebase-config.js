@@ -11,12 +11,13 @@
 // ─────────────────────────────────────────────────────────────
 
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyC0g3MkCD1MgpDO3B53Y3wOl5hvyHhc5Dc",
+  authDomain: "trpg-c4f51.firebaseapp.com",
+  projectId: "trpg-c4f51",
+  storageBucket: "trpg-c4f51.firebasestorage.app",
+  messagingSenderId: "598090987208",
+  appId: "1:598090987208:web:7035c3399ff99b314597fd",
+  measurementId: "G-0RGBNP7G5P",
 };
 
 // 위 값이 채워졌는지 간단히 확인하는 플래그 (UI 안내용)
