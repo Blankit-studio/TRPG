@@ -60,36 +60,68 @@ const el = (tag, props = {}, children = []) => {
   return node;
 };
 
-// 태그(칩) 입력 컴포넌트 — Enter/쉼표로 추가, ×로 삭제. { wrap, getTags } 반환.
-function tagInput(initial = [], placeholder = "입력 후 Enter…") {
-  const tags = [...initial];
-  const wrap = el("div", { class: "tag-input" });
-  const input = el("input", { type: "text", class: "tag-input-field", placeholder, maxlength: "24" });
+// 직업 카테고리 정규화 — 구버전(문자열 배열)도 { name, image, stats } 형태로 변환
+function normalizeJobs(arr) {
+  return (arr || [])
+    .map((j) => (typeof j === "string"
+      ? { name: j, image: "", stats: "" }
+      : { name: j.name || "", image: j.image || "", stats: j.stats || "" }))
+    .filter((j) => j.name);
+}
+
+// 읽기 전용 직업 카드 (이름 · 이미지 · 능력치)
+function jobCardView(job) {
+  const img = el("img", { class: "job-card-img", src: (job.image || "").trim() || fallbackAvatar(job.name), alt: "" });
+  img.addEventListener("error", () => { img.onerror = null; img.src = fallbackAvatar(job.name); });
+  return el("div", { class: "job-card" }, [
+    img,
+    el("div", { class: "job-card-body" }, [
+      el("div", { class: "job-card-name", text: job.name }),
+      job.stats ? el("div", { class: "job-card-stats", text: job.stats }) : null,
+    ]),
+  ]);
+}
+
+// 직업 카드 편집기 — 이름·이미지 URL·능력치 작성. { wrap, getJobs } 반환.
+function jobEditor(initial = []) {
+  const jobs = normalizeJobs(initial).map((j) => ({ ...j }));
+  const wrap = el("div", { class: "job-editor" });
+  const list = el("div", { class: "job-edit-list" });
+  const addBtn = el("button", { type: "button", class: "btn btn-sm", style: "align-self:flex-start", onclick: () => { jobs.push({ name: "", image: "", stats: "" }); render(); list.querySelectorAll(".job-name").forEach((n, i, a) => { if (i === a.length - 1) n.focus(); }); } }, "＋ 직업 추가");
+  wrap.append(list, addBtn);
+
   function render() {
-    wrap.querySelectorAll(".tag-chip").forEach((n) => n.remove());
-    tags.forEach((t, i) => {
-      const chip = el("span", { class: "tag-chip" }, [
-        el("span", { text: t }),
-        el("button", { type: "button", class: "tag-x", onclick: () => { tags.splice(i, 1); render(); } }, "×"),
-      ]);
-      wrap.insertBefore(chip, input);
+    list.innerHTML = "";
+    jobs.forEach((job, i) => {
+      const preview = el("img", { class: "job-preview", alt: "" });
+      const setPreview = () => { preview.src = (job.image || "").trim() || fallbackAvatar(job.name || "?"); };
+      preview.addEventListener("error", () => { preview.onerror = null; preview.src = fallbackAvatar(job.name || "?"); });
+      const nameIn = el("input", { type: "text", maxlength: "30", value: job.name, placeholder: "직업 이름 (예: 탐정)", class: "job-name" });
+      const imgIn = el("input", { type: "text", maxlength: "500", value: job.image, placeholder: "캐릭터 이미지 URL (선택)" });
+      const statsIn = el("textarea", { maxlength: "500", placeholder: "직업 능력치 / 설명 (예: 추리 70, 심리학 50, 권총)" });
+      statsIn.value = job.stats;
+      nameIn.addEventListener("input", () => { job.name = nameIn.value; if (!(job.image || "").trim()) setPreview(); });
+      imgIn.addEventListener("input", () => { job.image = imgIn.value; setPreview(); });
+      statsIn.addEventListener("input", () => { job.stats = statsIn.value; });
+      setPreview();
+      list.appendChild(el("div", { class: "job-card-edit" }, [
+        el("div", { class: "job-card-top" }, [
+          preview,
+          el("div", { class: "grow" }, [nameIn, imgIn]),
+          el("button", { type: "button", class: "btn btn-sm btn-danger", onclick: () => { jobs.splice(i, 1); render(); } }, "✕"),
+        ]),
+        statsIn,
+      ]));
     });
   }
-  function add(val) {
-    (val || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean).forEach((v) => {
-      if (!tags.includes(v) && tags.length < 40) tags.push(v);
-    });
-    input.value = "";
-    render();
-  }
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(input.value); }
-    else if (e.key === "Backspace" && !input.value && tags.length) { tags.pop(); render(); }
-  });
-  input.addEventListener("blur", () => { if (input.value.trim()) add(input.value); });
-  wrap.appendChild(input);
   render();
-  return { wrap, getTags: () => [...tags] };
+  return {
+    wrap,
+    getJobs: () => jobs
+      .map((j) => ({ name: (j.name || "").trim(), image: (j.image || "").trim(), stats: (j.stats || "").trim() }))
+      .filter((j) => j.name)
+      .slice(0, 40),
+  };
 }
 
 function toast(msg, isError = false) {
@@ -526,6 +558,15 @@ function renderCampaign(view, id) {
   function renderInfoTab(panel) {
     panel.appendChild(el("div", { class: "prose", text: data.description || "소개가 아직 없습니다." }));
 
+    // 직업 카테고리 카드
+    const jobsArr = normalizeJobs(data.jobCategories);
+    if (jobsArr.length) {
+      panel.appendChild(el("h3", { class: "block-title", text: "🧰 직업 카테고리" }));
+      const jg = el("div", { class: "job-grid" });
+      jobsArr.forEach((j) => jg.appendChild(jobCardView(j)));
+      panel.appendChild(jg);
+    }
+
     // 멤버 목록
     panel.appendChild(el("h3", { class: "block-title", text: "참여 멤버" }));
     const memberBox = el("div", { class: "member-list" });
@@ -682,9 +723,9 @@ function renderCampaign(view, id) {
   function openApplyModal() {
     const charInput = el("input", { type: "text", maxlength: "40", placeholder: "참여할 캐릭터 이름 (선택)" });
     const msgInput = el("textarea", { maxlength: "300", placeholder: "GM에게 한마디 (플레이 경험, 가능 시간 등)" });
-    const jobs = data.jobCategories || [];
+    const jobs = normalizeJobs(data.jobCategories);
     const jobSelect = jobs.length
-      ? el("select", {}, [el("option", { value: "" }, "직업 선택 (선택 안 함)"), ...jobs.map((j) => el("option", { value: j }, j))])
+      ? el("select", {}, [el("option", { value: "" }, "직업 선택 (선택 안 함)"), ...jobs.map((j) => el("option", { value: j.name }, j.name + (j.stats ? ` — ${j.stats}` : "")))])
       : null;
     openModal({
       title: "참여 신청",
@@ -968,10 +1009,9 @@ function renderTemplate(view, id) {
       actions,
     ]));
     wrap.appendChild(el("h3", { class: "block-title", text: "🧰 직업 카테고리" }));
-    const chips = el("div", { class: "member-list" });
-    (data.jobCategories || []).forEach((f) => chips.appendChild(el("span", { class: "stat-chip", text: f })));
-    if (!(data.jobCategories || []).length) chips.appendChild(el("div", { class: "card-sub", text: "등록된 직업 카테고리 없음" }));
-    wrap.appendChild(chips);
+    const jobsArr = normalizeJobs(data.jobCategories);
+    if (!jobsArr.length) wrap.appendChild(el("div", { class: "card-sub", text: "등록된 직업이 없습니다." }));
+    else { const jg = el("div", { class: "job-grid" }); jobsArr.forEach((j) => jg.appendChild(jobCardView(j))); wrap.appendChild(jg); }
     wrap.appendChild(el("h3", { class: "block-title", text: "📖 스토리 라인" }));
     wrap.appendChild(el("div", { class: "prose", text: data.storyline || "작성된 스토리 라인이 없습니다." }));
   }).catch((e) => { console.error(e); wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "불러오지 못했습니다." })); });
@@ -992,7 +1032,7 @@ function openCampaignModal(existing, prefill) {
   const datalist = el("datalist", { id: "systemList" }, SYSTEMS.map((s) => el("option", { value: s })));
   const descInput = el("textarea", { maxlength: "1000", placeholder: "시나리오 소개, 분위기, 진행 방식, 주의사항 등" });
   descInput.value = existing?.description || prefill?.description || "";
-  const job = tagInput(existing?.jobCategories || prefill?.jobCategories || [], "예: 탐정 (입력 후 Enter)");
+  const job = jobEditor(existing?.jobCategories || prefill?.jobCategories || []);
   const scheduleInput = el("input", { type: "text", maxlength: "60", value: existing?.schedule || "", placeholder: "예: 매주 토요일 20:00, 온라인" });
   const maxInput = el("input", { type: "number", min: "1", max: "12", value: existing?.maxPlayers || 4 });
 
@@ -1004,12 +1044,13 @@ function openCampaignModal(existing, prefill) {
   openModal({
     title: isEdit ? "캠페인 설정" : "캠페인 모집하기",
     sub: isEdit ? "캠페인 정보를 수정합니다." : "새 TRPG 캠페인을 열고 플레이어를 모집하세요.",
+    wide: true,
     body: [
       datalist,
       el("div", { class: "field" }, [el("label", { text: "제목" }), titleInput]),
       el("div", { class: "field" }, [el("label", { text: "시스템 / 룰" }), systemInput]),
       el("div", { class: "field" }, [el("label", { text: "소개" }), descInput]),
-      el("div", { class: "field" }, [el("label", { text: "직업 카테고리 (플레이어가 신청 시 선택)" }), job.wrap]),
+      el("div", { class: "field" }, [el("label", { text: "직업 카테고리 (이름·이미지·능력치 / 신청 시 선택)" }), job.wrap]),
       el("div", { class: "form-row" }, [
         el("div", { class: "field grow" }, [el("label", { text: "일정" }), scheduleInput]),
         el("div", { class: "field", style: "width:110px" }, [el("label", { text: "정원" }), maxInput]),
@@ -1028,7 +1069,7 @@ function openCampaignModal(existing, prefill) {
           title,
           system: systemInput.value.trim(),
           description: descInput.value.trim(),
-          jobCategories: job.getTags(),
+          jobCategories: job.getJobs(),
           schedule: scheduleInput.value.trim(),
           maxPlayers: Math.max(1, parseInt(maxInput.value, 10) || 1),
           status: statusSelect.value,
@@ -1229,7 +1270,7 @@ function openCharacterModal(opts = {}) {
 function openTemplateModal(existing) {
   if (!isMember()) { toast("템플릿을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
   const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: 인스머스의 그림자" });
-  const job = tagInput(existing?.jobCategories || [], "예: 탐정 (입력 후 Enter)");
+  const job = jobEditor(existing?.jobCategories || []);
   const storyInput = el("textarea", { maxlength: "2000", placeholder: "이 플레이의 배경과 줄거리를 적어주세요." });
   storyInput.value = existing?.storyline || "";
   const visSelect = el("select");
@@ -1238,9 +1279,10 @@ function openTemplateModal(existing) {
   openModal({
     title: existing ? "템플릿 편집" : "템플릿 만들기",
     sub: "플레이 설정을 제목·직업 카테고리·스토리 라인으로 간단히 정리하세요.",
+    wide: true,
     body: [
       el("div", { class: "field" }, [el("label", { text: "템플릿 제목" }), nameInput]),
-      el("div", { class: "field" }, [el("label", { text: "직업 카테고리" }), job.wrap]),
+      el("div", { class: "field" }, [el("label", { text: "직업 카테고리 (이름·이미지·능력치)" }), job.wrap]),
       el("div", { class: "field" }, [el("label", { text: "스토리 라인" }), storyInput]),
       el("div", { class: "field" }, [el("label", { text: "공개 범위" }), visSelect]),
     ],
@@ -1249,7 +1291,7 @@ function openTemplateModal(existing) {
       el("button", { class: "btn btn-primary", onclick: async () => {
         const name = nameInput.value.trim();
         if (!name) { toast("템플릿 제목을 입력하세요.", true); return; }
-        const jobCategories = job.getTags();
+        const jobCategories = job.getJobs();
         const meInfo = me();
         const payload = {
           name,

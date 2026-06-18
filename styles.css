@@ -257,22 +257,32 @@ a { color: inherit; text-decoration: none; }
 .field select option { background: #0a0a0a; color: var(--text); }
 .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
 
-/* ── 태그(칩) 입력 ── */
-.tag-input {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 7px 8px;
+/* ── 직업 카드 (읽기 전용) ── */
+.job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.job-card {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
 }
-.tag-input:focus-within { border-color: var(--blue); }
-.tag-input-field { flex: 1; min-width: 90px; background: transparent; border: none; color: var(--text); font-size: 14px; font-family: inherit; padding: 3px; }
-.tag-input-field:focus { outline: none; }
-.tag-input-field::placeholder { color: rgba(255, 255, 255, 0.4); }
-.tag-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: rgba(0, 171, 252, 0.15); color: var(--blue); border: 1px solid var(--blue);
-  border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 13px; font-weight: 700;
+.job-card-img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: var(--panel-2); border: 1px solid var(--border); flex-shrink: 0; }
+.job-card-body { min-width: 0; }
+.job-card-name { font-weight: 800; font-size: 15px; }
+.job-card-stats { color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+
+/* ── 직업 카드 편집기 ── */
+.job-editor { display: flex; flex-direction: column; gap: 10px; }
+.job-edit-list { display: flex; flex-direction: column; gap: 10px; }
+.job-card-edit { display: flex; flex-direction: column; gap: 8px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+.job-card-top { display: flex; gap: 10px; align-items: flex-start; }
+.job-card-top .grow { display: flex; flex-direction: column; gap: 6px; }
+.job-preview { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--panel-2); border: 1px solid var(--border); flex-shrink: 0; }
+.job-card-edit input, .job-card-edit textarea {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: inherit; width: 100%;
 }
-.tag-x { background: transparent; border: none; color: var(--blue); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
-.tag-x:hover { color: var(--white); }
+.job-card-edit textarea { resize: vertical; min-height: 52px; }
+.job-card-edit input::placeholder, .job-card-edit textarea::placeholder { color: rgba(255, 255, 255, 0.4); }
+.job-card-edit input:focus, .job-card-edit textarea:focus { outline: none; border-color: var(--blue); }
+.job-name { font-weight: 700; }
 
 .emoji-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .emoji-opt { font-size: 18px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-soft); cursor: pointer; }

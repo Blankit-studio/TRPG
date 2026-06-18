@@ -105,7 +105,9 @@ users/{uid}
 templates/{templateId}                # 플레이 설정 템플릿
   ownerUid, ownerName, ownerPhoto
   name                                 # 템플릿 제목
-  jobCategories: ["탐정","기자",...]    # 직업 카테고리
+  jobCategories: [                     # 직업 카드 목록
+    { name, image, stats }             #  직업 이름 · 캐릭터 이미지 URL · 능력치
+  ]
   storyline                            # 스토리 라인
   visibility, createdAt, updatedAt
 
@@ -119,7 +121,7 @@ characters/{characterId}              # 캐릭터 시트
 campaigns/{campaignId}                # 캠페인(모집 + 기록)
   gmUid, gmName, gmPhoto
   title, system, description, schedule, maxPlayers
-  jobCategories: ["탐정","기자",...]   # 신청 시 선택할 직업 카테고리
+  jobCategories: [{ name, image, stats }]   # 직업 카드 (신청 시 이름으로 선택)
   status: "recruiting" | "playing" | "done"
   visibility: "public" | "unlisted" | "private"
   memberUids: [uid, ...]              # 참여 멤버(GM 포함)
