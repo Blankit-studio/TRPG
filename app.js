@@ -1301,7 +1301,7 @@ function googleIcon() {
 }
 function fallbackAvatar(name = "?") {
   const ch = encodeURIComponent((name || "?").trim().charAt(0).toUpperCase() || "?");
-  return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' fill='%23262c4f'/><text x='50%25' y='54%25' font-size='30' fill='%238b97ff' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>${ch}</text></svg>`;
+  return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' fill='%2300abfc'/><text x='50%25' y='54%25' font-size='30' fill='%23000000' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>${ch}</text></svg>`;
 }
 
 // ── 시작 ───────────────────────────────────────────────────────
