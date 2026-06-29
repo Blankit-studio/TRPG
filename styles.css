@@ -228,6 +228,20 @@ a { color: inherit; text-decoration: none; }
 .play-input:focus { outline: none; border-color: var(--blue); }
 .play-input::placeholder { color: rgba(255, 255, 255, 0.4); }
 
+/* ── AI 진행 보조 ── */
+.ai-panel { margin-top: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); padding: 14px; }
+.ai-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.ai-title { font-weight: 800; font-size: 15px; color: var(--blue); }
+.ai-sub { color: var(--muted); font-size: 12px; }
+.ai-keyform { display: flex; flex-direction: column; gap: 10px; }
+.ai-keyform a { color: var(--blue); }
+.ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ai-output { margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.ai-output.error { border-color: var(--white); color: var(--white); }
+.ai-text { font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.ai-out-actions { display: flex; gap: 6px; margin-top: 10px; }
+.ai-foot { margin-top: 10px; display: flex; justify-content: flex-end; }
+
 /* ── 모달 ── */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7);

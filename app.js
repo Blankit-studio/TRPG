@@ -205,6 +205,119 @@ function rollDice(input) {
   return { notation: `${count}d${sides}${modifier ? (modifier > 0 ? "+" + modifier : modifier) : ""}`, rolls, modifier, sides, total };
 }
 
+// ── AI 진행 보조 (무료 Gemini API · GM이 본인 키 사용) ─────────
+const AI_KEY_LS = "dicelog_gemini_key";
+const AI_MODEL = "gemini-2.0-flash"; // 무료 등급 모델 (콘솔에서 다른 모델로 교체 가능)
+const AI_SYSTEM =
+  "당신은 숙련된 TRPG 게임 마스터(GM)를 돕는 보조자입니다. 주어진 게임 상황과 스토리 맥락을 활용해, " +
+  "GM이 세션 도중 즉시 사용할 수 있는 구체적이고 간결한 제안을 한국어로 제공합니다. 실전에서 바로 읽어주거나 적용할 수 있게 " +
+  "너무 길지 않게 작성하고, 플레이어의 자유의지를 존중하며 강제적 전개는 피하세요.";
+
+const getAiKey = () => localStorage.getItem(AI_KEY_LS) || "";
+const setAiKey = (k) => localStorage.setItem(AI_KEY_LS, k);
+
+async function callGemini(prompt, systemText) {
+  const key = getAiKey();
+  if (!key) throw new Error("NO_KEY");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.9, maxOutputTokens: 800 },
+    }),
+  });
+  if (!res.ok) {
+    if (res.status === 400 || res.status === 403) throw new Error("API 키가 올바르지 않거나 권한이 없습니다.");
+    if (res.status === 429) throw new Error("무료 사용량 한도를 초과했어요. 잠시 후 다시 시도하세요.");
+    throw new Error("요청 실패 (" + res.status + ")");
+  }
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text).join("").trim();
+  if (!text) throw new Error("응답이 비어 있습니다. (안전 필터에 걸렸을 수 있어요)");
+  return text;
+}
+
+// 캠페인 맥락을 AI 프롬프트용 텍스트로 정리
+function campaignAiContext(data, nodes, log) {
+  const parts = [`캠페인 제목: ${data.title || "(제목 없음)"}`];
+  if (data.system) parts.push(`시스템/룰: ${data.system}`);
+  if (data.description) parts.push(`소개: ${data.description}`);
+  const jobs = normalizeJobs(data.jobCategories);
+  if (jobs.length) parts.push("직업: " + jobs.map((j) => j.name + (j.stats ? `(${j.stats})` : "")).join(", "));
+  if (nodes.length) parts.push("스토리 맵:\n" + nodes.map((n) => `- ${n.title || "무제"}: ${n.body || ""}`).join("\n"));
+  const recent = (log || []).slice(-12).map((r) => r.type === "roll" ? `${r.byName} 주사위 ${r.notation}=${r.total}` : `${r.byName}: ${r.text}`);
+  if (recent.length) parts.push("최근 진행:\n" + recent.join("\n"));
+  return parts.join("\n");
+}
+
+const AI_ACTIONS = [
+  ["다음 전개 3가지", "지금 상황에서 이어질 수 있는 흥미로운 전개를 3가지 제안해줘. 각 항목 1~2문장으로 간결하게."],
+  ["NPC 즉석 생성", "현재 장면에 어울리는 NPC 1명을 즉석에서 만들어줘. 이름·성격·동기·말투 예시를 짧게 포함해줘."],
+  ["랜덤 돌발사건", "지금 분위기에 맞는 예상치 못한 돌발 사건 하나를 제안해줘. 2~3문장으로 짧게."],
+  ["장면 묘사", "현재 장면을 플레이어에게 들려줄 생생한 묘사로 3~4문장 써줘."],
+  ["판정 난이도 추천", "현재 상황에서 필요할 법한 판정과 적절한 난이도(목표 수치/주사위)를 시스템에 맞게 추천해줘."],
+];
+
+// AI 보조 패널 — getContext()로 최신 맥락 제공, onShare(text)로 결과를 플레이 로그에 공유
+function buildAiPanel({ getContext, onShare }) {
+  const panel = el("div", { class: "ai-panel" });
+  panel.appendChild(el("div", { class: "ai-head" }, [
+    el("span", { class: "ai-title", text: "🤖 AI 진행 보조" }),
+    el("span", { class: "ai-sub", text: "세션 진행·즉석 선택을 돕습니다" }),
+  ]));
+  const bodyBox = el("div");
+  panel.appendChild(bodyBox);
+
+  function renderKeyForm() {
+    bodyBox.innerHTML = "";
+    const keyIn = el("input", { type: "password", class: "play-input", placeholder: "Gemini API 키 붙여넣기" });
+    keyIn.addEventListener("keydown", (e) => { if (e.key === "Enter") saveKey(); });
+    const saveKey = () => { const k = keyIn.value.trim(); if (!k) { toast("키를 입력하세요.", true); return; } setAiKey(k); toast("API 키를 저장했습니다."); renderTools(); };
+    bodyBox.appendChild(el("div", { class: "ai-keyform" }, [
+      el("div", { class: "mode-hint", style: "margin:0", html: "무료 <b>Gemini API 키</b>가 필요합니다. <a href='https://aistudio.google.com/apikey' target='_blank' rel='noopener'>Google AI Studio에서 무료 발급</a> 후 붙여넣으세요. 키는 <b>이 브라우저에만</b> 저장되며 서버로 전송되지 않습니다." }),
+      el("div", { class: "play-row" }, [keyIn, el("button", { class: "btn btn-primary", onclick: saveKey }, "저장")]),
+    ]));
+  }
+
+  function renderTools() {
+    bodyBox.innerHTML = "";
+    const quick = el("div", { class: "ai-actions" });
+    AI_ACTIONS.forEach(([label, instr]) => quick.appendChild(el("button", { class: "btn btn-sm", onclick: () => run(instr) }, label)));
+    const askIn = el("input", { class: "play-input", placeholder: "직접 물어보기 (예: 이 방의 함정 아이디어 줘)" });
+    askIn.addEventListener("keydown", (e) => { if (e.key === "Enter" && askIn.value.trim()) { run(askIn.value.trim()); askIn.value = ""; } });
+    const out = el("div", { class: "ai-output", hidden: true });
+    bodyBox.append(
+      quick,
+      el("div", { class: "play-row" }, [askIn, el("button", { class: "btn btn-primary", onclick: () => { if (askIn.value.trim()) { run(askIn.value.trim()); askIn.value = ""; } } }, "생성")]),
+      out,
+      el("div", { class: "ai-foot" }, [el("button", { class: "btn btn-sm btn-ghost", onclick: () => { if (confirm("저장된 API 키를 삭제할까요?")) { localStorage.removeItem(AI_KEY_LS); renderKeyForm(); } } }, "키 변경/삭제")]),
+    );
+
+    async function run(instruction) {
+      out.hidden = false; out.className = "ai-output"; out.textContent = "생각 중…";
+      try {
+        const text = await callGemini(`[게임 상황]\n${getContext()}\n\n[요청]\n${instruction}`, AI_SYSTEM);
+        out.innerHTML = "";
+        out.appendChild(el("div", { class: "ai-text", text }));
+        out.appendChild(el("div", { class: "ai-out-actions" }, [
+          el("button", { class: "btn btn-sm", onclick: async () => { try { await navigator.clipboard.writeText(text); toast("복사했습니다."); } catch { prompt("복사하세요:", text); } } }, "📋 복사"),
+          onShare ? el("button", { class: "btn btn-sm", onclick: () => { onShare("🤖 " + text); toast("플레이 로그에 공유했습니다."); } }, "💬 로그에 공유") : null,
+        ]));
+      } catch (e) {
+        out.className = "ai-output error";
+        if (e.message === "NO_KEY") { renderKeyForm(); return; }
+        out.textContent = "AI 오류: " + e.message;
+      }
+    }
+  }
+
+  if (getAiKey()) renderTools(); else renderKeyForm();
+  return panel;
+}
+
 // ── 초기화 ─────────────────────────────────────────────────────
 function boot() {
   if (!isConfigured) {
@@ -693,6 +806,12 @@ function renderCampaign(view, id) {
           el("div", { class: "play-row" }, [chatInput, el("button", { class: "btn", onclick: () => { sendChat(chatInput.value); chatInput.value = ""; } }, "전송")]),
         ])
       );
+
+      // AI 진행 보조 (멤버/GM, 각자 무료 Gemini 키 사용)
+      panel.appendChild(buildAiPanel({
+        getContext: () => campaignAiContext(data, storyNodesFrom(data), playLog),
+        onShare: (text) => sendChat(text),
+      }));
     }
   }
   function renderLog(log) {
