@@ -3,18 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>다이스로그 — TRPG 모집 · 세션 기록 · 캐릭터 시트</title>
+  <title>TRPG — 모집 · 세션 기록 · 캐릭터 시트</title>
   <meta name="description" content="GM과 플레이어가 함께 TRPG를 즐기는 공간. 캠페인을 모집하고, 세션을 기록하고, 캐릭터 시트를 관리하고, 실시간으로 주사위를 굴리세요." />
   <link rel="preconnect" href="https://www.gstatic.com" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M31,51L13,51L13,13L51,13L51,33' fill='none' stroke='%23ffffff' stroke-width='6.5' stroke-linecap='round' stroke-linejoin='round'/><path d='M51,39L51,51L37,51' fill='none' stroke='%2300abfc' stroke-width='6.5' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <!-- 상단 헤더 -->
   <header class="app-header">
     <a href="#/" class="brand">
-      <span class="brand-logo">🎲</span>
-      <span class="brand-name">다이스로그</span>
+      <svg class="brand-logo" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <path d="M31 51 L13 51 L13 13 L51 13 L51 33" stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M51 39 L51 51 L37 51" stroke="#00abfc" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-name">TRPG</span>
     </a>
     <nav class="nav" id="nav">
       <a href="#/" class="nav-link" data-route="home">모집 둘러보기</a>
@@ -43,7 +46,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <footer class="app-footer">
-    <span>다이스로그 · GM과 플레이어를 위한 TRPG 테이블</span>
+    <span>TRPG · GM과 플레이어를 위한 테이블</span>
   </footer>
 
   <script type="module" src="app.js"></script>
