@@ -1754,5 +1754,29 @@ function fallbackAvatar(name = "?") {
   return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' fill='%2300abfc'/><text x='50%25' y='54%25' font-size='30' fill='%23000000' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>${ch}</text></svg>`;
 }
 
+// ── 테마(나이트/일반 모드) ─────────────────────────────────────
+const THEME_LS = "dicelog_theme";
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("themeToggle");
+  if (btn) {
+    btn.textContent = theme === "light" ? "☀️" : "🌙";
+    const label = theme === "light" ? "나이트 모드로 전환" : "일반 모드로 전환";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+  }
+}
+function initTheme() {
+  const saved = localStorage.getItem(THEME_LS) === "light" ? "light" : "dark";
+  applyTheme(saved);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.addEventListener("click", () => {
+    const next = (localStorage.getItem(THEME_LS) === "light") ? "dark" : "light";
+    localStorage.setItem(THEME_LS, next);
+    applyTheme(next);
+  });
+}
+
 // ── 시작 ───────────────────────────────────────────────────────
+initTheme();
 boot();
