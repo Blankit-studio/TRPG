@@ -1,0 +1,46 @@
+# GitHub Pages 자동 배포 — 정적 사이트(HTML/CSS/JS)를 그대로 올립니다.
+# main 또는 개발 브랜치에 푸시하면 자동 실행됩니다.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, claude/bold-lamport-762fh3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Collect static files
+        run: |
+          mkdir dist
+          cp index.html styles.css app.js firebase-config.js dist/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
