@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// 다이스로그 — TRPG 모집 · 세션 기록 · 캐릭터 시트 · 실시간 주사위
+// TRPG — 모집 · 세션 기록 · 캐릭터 시트 · 실시간 주사위
 // (Firebase + Vanilla JS)
 // ─────────────────────────────────────────────────────────────
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
@@ -69,7 +69,6 @@ const EXAMPLE_TEMPLATES = [
 // ── 전역 상태 ──────────────────────────────────────────────────
 let app, auth, db;
 let currentUser = null;
-let userProfile = null;
 const subs = [];            // 현재 화면의 onSnapshot 해제 함수들
 
 // ── DOM 헬퍼 ───────────────────────────────────────────────────
@@ -212,14 +211,16 @@ function toast(msg, isError = false) {
   toast._t = setTimeout(() => (t.hidden = true), 2800);
 }
 
-function fmtDate(ts) {
-  if (!ts) return "";
-  const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
-  if (isNaN(d)) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 const isMember = () => currentUser && !currentUser.isAnonymous;
+
+// 게스트 표시 이름 (브라우저에 기억) — 익명 사용자 구분용
+const GUEST_NAME_LS = "trpg_guest_name";
+const getGuestName = () => (localStorage.getItem(GUEST_NAME_LS) || "").trim();
+const setGuestName = (n) => localStorage.setItem(GUEST_NAME_LS, (n || "").trim());
+function displayNameFor(user) {
+  if (user && !user.isAnonymous) return user.displayName || "이름없음";
+  return getGuestName() || "게스트";
+}
 
 // ── 주사위 파서 ────────────────────────────────────────────────
 // "2d6+3", "d20", "1d100-5" 등 한 개의 주사위 항 + 보정치 지원
@@ -368,12 +369,12 @@ function boot() {
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
     if (user && !user.isAnonymous) await upsertProfile(user);
-    else userProfile = null;
     renderAuthArea();
     route();
   });
 
-  window.addEventListener("hashchange", route);
+  // 화면 이동 시에만 모달 정리 (인증 변화로 인한 재렌더에서는 열린 모달 유지)
+  window.addEventListener("hashchange", () => { closeModal(); route(); });
   route();
 }
 
@@ -391,7 +392,6 @@ async function upsertProfile(user) {
     };
     if (!snap.exists()) patch.createdAt = serverTimestamp();
     await setDoc(ref, patch, { merge: true });
-    userProfile = { uid: user.uid, ...(snap.exists() ? snap.data() : {}), ...patch };
   } catch (e) {
     console.warn("프로필 저장 실패", e);
   }
@@ -910,7 +910,7 @@ function renderCampaign(view, id) {
   // ── 캐릭터 탭 ──
   function renderCharsTab(panel) {
     if (currentUser && (isGM() || amMember())) {
-      panel.appendChild(el("button", { class: "btn btn-sm btn-primary", style: "margin-bottom:14px", onclick: () => openCharacterModal({ campaignId: id, system: data.system, templateId: data.templateId }) }, "＋ 이 캠페인에 캐릭터 추가"));
+      panel.appendChild(el("button", { class: "btn btn-sm btn-primary", style: "margin-bottom:14px", onclick: () => openCharacterModal({ campaignId: id, system: data.system, templateId: data.templateId, onSaved: loadCampaignCharacters }) }, "＋ 이 캠페인에 캐릭터 추가"));
     }
     if (!characters.length) { panel.appendChild(el("div", { class: "empty", text: "아직 등록된 캐릭터가 없습니다." })); return; }
     const grid = el("div", { class: "cards" });
@@ -948,6 +948,9 @@ function renderCampaign(view, id) {
 
   // ── 액션들 ──
   function openApplyModal() {
+    const isGuest = !isMember();
+    const nameInput = el("input", { type: "text", maxlength: "20", placeholder: "표시할 이름 (예: 홍길동)" });
+    nameInput.value = getGuestName();
     const charInput = el("input", { type: "text", maxlength: "40", placeholder: "참여할 캐릭터 이름 (선택)" });
     const msgInput = el("textarea", { maxlength: "300", placeholder: "GM에게 한마디 (플레이 경험, 가능 시간 등)" });
     const jobs = normalizeJobs(data.jobCategories);
@@ -958,7 +961,8 @@ function renderCampaign(view, id) {
       title: "참여 신청",
       sub: `"${data.title}" 캠페인에 참여를 신청합니다.`,
       body: [
-        !isMember() ? el("div", { class: "mode-hint", style: "margin:0", text: "로그인 없이 게스트로도 신청할 수 있어요. (이름은 Google 계정 또는 게스트로 표시)" }) : null,
+        isGuest ? el("div", { class: "mode-hint", style: "margin:0", text: "로그인 없이 게스트로도 신청할 수 있어요. 표시할 이름을 입력해 주세요." }) : null,
+        isGuest ? el("div", { class: "field" }, [el("label", { text: "이름 (게스트)" }), nameInput]) : null,
         jobSelect ? el("div", { class: "field" }, [el("label", { text: "희망 직업" }), jobSelect]) : null,
         el("div", { class: "field" }, [el("label", { text: "캐릭터 이름" }), charInput]),
         el("div", { class: "field" }, [el("label", { text: "신청 메시지" }), msgInput]),
@@ -966,12 +970,17 @@ function renderCampaign(view, id) {
       actions: [
         el("button", { class: "btn btn-ghost", onclick: closeModal }, "취소"),
         el("button", { class: "btn btn-primary", onclick: async () => {
+          if (isGuest) {
+            const n = nameInput.value.trim();
+            if (!n) { toast("이름을 입력하세요.", true); return; }
+            setGuestName(n);
+          }
           const user = await ensureUser();
           if (!user) return;
           try {
             await setDoc(doc(db, "campaigns", id, "applications", user.uid), {
               byUid: user.uid,
-              byName: user.displayName || "게스트",
+              byName: displayNameFor(user),
               byPhoto: user.photoURL || "",
               job: jobSelect ? jobSelect.value : "",
               characterName: charInput.value.trim(),
@@ -985,12 +994,16 @@ function renderCampaign(view, id) {
         } }, "신청하기"),
       ],
     });
+    setTimeout(() => (isGuest ? nameInput : charInput).focus(), 50);
   }
   async function cancelApplication() {
     try { await deleteDoc(doc(db, "campaigns", id, "applications", currentUser.uid)); toast("신청을 취소했습니다."); }
     catch (e) { console.error(e); toast("취소 실패: " + (e.code || e.message), true); }
   }
   async function acceptApplication(a) {
+    const cap = data.maxPlayers || 0;
+    const cur = (data.memberUids || []).length;
+    if (cap && cur >= cap && !confirm(`정원(${cap}명)이 이미 찼습니다. 그래도 수락할까요?`)) return;
     try {
       await updateDoc(doc(db, "campaigns", id), {
         memberUids: arrayUnion(a.byUid),
@@ -1018,7 +1031,7 @@ function renderCampaign(view, id) {
     try {
       await addDoc(collection(db, "campaigns", id, "rolls"), {
         type: "roll", notation: r.notation, rolls: r.rolls, modifier: r.modifier, total: r.total,
-        byUid: user.uid, byName: user.displayName || "게스트", byPhoto: user.photoURL || "",
+        byUid: user.uid, byName: displayNameFor(user), byPhoto: user.photoURL || "",
         createdAt: serverTimestamp(),
       });
     } catch (e) { console.error(e); toast("주사위 실패: " + (e.code || e.message), true); }
@@ -1031,7 +1044,7 @@ function renderCampaign(view, id) {
     try {
       await addDoc(collection(db, "campaigns", id, "rolls"), {
         type: "chat", text,
-        byUid: user.uid, byName: user.displayName || "게스트", byPhoto: user.photoURL || "",
+        byUid: user.uid, byName: displayNameFor(user), byPhoto: user.photoURL || "",
         createdAt: serverTimestamp(),
       });
     } catch (e) { console.error(e); toast("전송 실패: " + (e.code || e.message), true); }
@@ -1063,9 +1076,10 @@ function renderCampaign(view, id) {
     },
     (err) => console.error("신청 구독 오류", err)
   ));
-  track(onSnapshot(query(collection(db, "campaigns", id, "rolls"), orderBy("createdAt", "asc"), limit(100)),
+  // 최신 100개를 받아 시간순으로 뒤집어 표시 (asc+limit 는 '가장 오래된' 100개만 받아 새 로그가 안 보임)
+  track(onSnapshot(query(collection(db, "campaigns", id, "rolls"), orderBy("createdAt", "desc"), limit(100)),
     (snap) => {
-      playLog = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      playLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
       const log = $("#playLog");
       if (log) renderLog(log);
     },
@@ -1226,7 +1240,7 @@ function renderTemplate(view, id) {
     wrap.innerHTML = "";
 
     const actions = el("div", { class: "schedule-actions" });
-    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, jobCategories: data.jobCategories || [], storyNodes: storyNodesFrom(data) }) }, "🎲 이 설정으로 캠페인 열기"));
+    if (isMember()) actions.appendChild(el("button", { class: "btn btn-sm btn-primary", onclick: () => openCampaignModal(null, { title: data.name, description: data.storyline || "", jobCategories: data.jobCategories || [], storyNodes: storyNodesFrom(data) }) }, "🎲 이 설정으로 캠페인 열기"));
     if (isOwner) {
       actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => openTemplateModal(data) }, "✏️ 편집"));
       actions.appendChild(el("button", { class: "btn btn-sm btn-danger", onclick: () => deleteTemplate(id, data.ownerUid) }, "삭제"));
@@ -1442,8 +1456,10 @@ function openCharacterModal(opts = {}) {
   const notesInput = el("textarea", { maxlength: "1500", placeholder: "기타 메모" });
   notesInput.value = existing?.notes || "";
 
+  // 캠페인에 연결해 만드는 캐릭터는 파티원이 볼 수 있게 기본 공개
+  const defaultVis = existing?.visibility || (opts.campaignId ? "public" : "unlisted");
   const visSelect = el("select");
-  Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...((existing?.visibility || "unlisted") === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
+  Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...(defaultVis === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
 
   openModal({
     title: existing ? "캐릭터 시트 편집" : "캐릭터 만들기",
@@ -1502,9 +1518,11 @@ function openCharacterModal(opts = {}) {
               createdAt: serverTimestamp(),
             });
             toast("캐릭터를 만들었습니다.");
-            location.hash = "#/char/" + encodeURIComponent(ref.id);
+            // 캠페인 화면에서 만든 경우 목록만 갱신, 그 외에는 시트로 이동
+            if (!opts.onSaved) location.hash = "#/char/" + encodeURIComponent(ref.id);
           }
           closeModal();
+          opts.onSaved?.();
         } catch (e) { console.error(e); toast("저장 실패: " + (e.code || e.message), true); }
       } }, existing ? "저장" : "만들기"),
     ],

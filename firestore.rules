@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// 다이스로그 — Firestore 보안 규칙
+// TRPG — Firestore 보안 규칙
 // Firebase 콘솔 → Firestore Database → 규칙(Rules) 탭에 그대로 붙여넣고 "게시"하세요.
 service cloud.firestore {
   match /databases/{database}/documents {

@@ -355,7 +355,7 @@ a { color: inherit; text-decoration: none; }
   background: radial-gradient(circle, var(--dots) 1px, transparent 1px) 0 0 / 24px 24px;
 }
 .story-overlay .story-node { cursor: default; }
-.story-node.editable .story-node-head { cursor: move; }
+.story-node.editable .story-node-head { cursor: move; touch-action: none; } /* 모바일 드래그 시 화면 스크롤 방지 */
 .story-node.connect-source { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
 .story-node-head { margin: -2px 0 2px; }
 .story-node-actions { display: flex; gap: 4px; margin-top: 8px; }
