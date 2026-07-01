@@ -36,6 +36,36 @@ const APP_STATUS = {
 // 템플릿 미선택 시 기본 능력치 프리셋
 const DEFAULT_STATS = ["근력", "민첩", "건강", "지능", "정신력", "외형"];
 
+// 바로 시작용 내장 예시 템플릿 (로그인 후 '내 템플릿으로 만들기'로 복제)
+const EXAMPLE_TEMPLATES = [
+  {
+    key: "fantasy-village-defense",
+    genre: "판타지",
+    name: "판타지 — 마을 방어",
+    jobCategories: [
+      { name: "전사", image: "", stats: "근력 위주 · 최전선 탱커 · 근접 방어의 핵심" },
+      { name: "마법사", image: "", stats: "지능 위주 · 광역 공격 마법 · 원거리 딜러" },
+      { name: "궁수", image: "", stats: "민첩 위주 · 원거리 정밀 사격 · 견제와 마무리" },
+      { name: "프리스트", image: "", stats: "신앙 위주 · 치유·버프·정화 지원" },
+      { name: "바드", image: "", stats: "매력 위주 · 사기 진작·군중 제어·정보 수집" },
+      { name: "소환사", image: "", stats: "정신력 위주 · 소환수로 전선 보강·수적 열세 보완" },
+      { name: "도적", image: "", stats: "민첩 위주 · 정찰·기습·함정 설치와 해제" },
+      { name: "연금술사", image: "", stats: "지식 위주 · 폭탄·물약·설치물 제작" },
+    ],
+    storyline:
+      "평화롭던 변경 마을에 마물 무리가 몰려온다. 파티는 정찰로 위협을 파악하고, 하루 동안 방벽과 함정으로 마을을 요새화한 뒤, " +
+      "밤의 척후전과 새벽의 총공세를 막아 마을을 지켜낸다. 우두머리를 쓰러뜨리면 그 배후 세력의 단서가 드러난다.",
+    storyNodes: [
+      { id: "n1", title: "발단 — 마을 도착", body: "평화로운 변경 마을 '이든브룩'. 최근 숲에서 가축과 사람이 사라진다는 소문이 돈다. 파티는 의뢰를 받고 마을에 도착한다.", x: 40, y: 40, links: ["n2"] },
+      { id: "n2", title: "정찰 — 숲의 흔적", body: "숲을 조사하면 고블린·오크의 흔적과 진영을 발견. 무리의 규모, 지휘 체계, 공격 예정일을 파악한다.", x: 320, y: 40, links: ["n3"] },
+      { id: "n3", title: "방어 준비", body: "촌장·주민과 협력해 방벽 보강, 함정 설치, 비전투원 대피, 보급과 배치를 결정한다. 남은 시간은 단 하루.", x: 600, y: 40, links: ["n4"] },
+      { id: "n4", title: "1차 습격 — 밤의 척후", body: "밤, 척후 마물이 외곽을 친다. 함정과 초동 대응으로 첫 파도를 막아낸다. 이때의 피해와 사기 변화가 이후 전투에 영향을 준다.", x: 600, y: 250, links: ["n5"] },
+      { id: "n5", title: "총공세 — 검은엄니", body: "새벽, 오크 군단과 우두머리 '검은엄니'의 총공세. 성문·성벽·중앙 광장 세 전선에서 격전이 벌어진다.", x: 320, y: 250, links: ["n6"] },
+      { id: "n6", title: "승리와 여운", body: "마을을 지켜내면 보상과 명성을 얻는다. 우두머리의 목걸이에서 배후 세력의 문양이 발견되어 다음 이야기로 이어진다.", x: 40, y: 250, links: [] },
+    ],
+  },
+];
+
 // ── 전역 상태 ──────────────────────────────────────────────────
 let app, auth, db;
 let currentUser = null;
@@ -632,6 +662,21 @@ function characterCard(data) {
   ]);
 }
 
+function exampleCard(ex) {
+  return el("div", { class: "card", onclick: () => openTemplateModal(null, ex) }, [
+    el("div", { class: "card-top" }, [
+      el("span", { class: "badge st-recruiting", text: "🌟 예시" }),
+      ex.genre ? el("span", { class: "tag", text: ex.genre }) : null,
+    ]),
+    el("div", { class: "card-name", text: ex.name }),
+    ex.storyline ? el("div", { class: "card-desc", text: ex.storyline }) : null,
+    el("div", { class: "card-foot" }, [
+      el("span", { class: "card-sub", html: `🧰 직업 <b>${(ex.jobCategories || []).length}</b>종` }),
+      el("span", { class: "card-sub", text: "클릭 → 내 템플릿으로 만들기" }),
+    ]),
+  ]);
+}
+
 function templateCard(data) {
   return el("div", { class: "card", onclick: () => (location.hash = "#/t/" + encodeURIComponent(data.id)) }, [
     el("div", { class: "card-top" }, [
@@ -1145,6 +1190,12 @@ async function renderTemplates(view) {
         : el("button", { class: "btn btn-google", onclick: doLogin }, [googleIcon(), "로그인하고 만들기"]),
     ])
   );
+  // 바로 시작용 예시 템플릿
+  view.appendChild(el("div", { class: "section-title" }, [el("h2", { text: "🌟 예시 템플릿" }), el("span", { class: "count", text: "바로 시작용" })]));
+  const exBox = el("div", { class: "cards" });
+  EXAMPLE_TEMPLATES.forEach((ex) => exBox.appendChild(exampleCard(ex)));
+  view.appendChild(exBox);
+
   const cards = el("div", { class: "cards" }, [el("div", { class: "empty", text: "불러오는 중…" })]);
   view.appendChild(el("div", { class: "section-title" }, [el("h2", { text: "공개 템플릿" })]));
   view.appendChild(cards);
@@ -1462,14 +1513,16 @@ function openCharacterModal(opts = {}) {
 }
 
 // ── 모달: 템플릿 생성/수정 ────────────────────────────────────
-function openTemplateModal(existing) {
+// existing: 편집 대상(있으면 수정) · prefill: 예시 등으로 새로 만들 때 초기값
+function openTemplateModal(existing, prefill) {
   if (!isMember()) { toast("템플릿을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
-  const nameInput = el("input", { type: "text", maxlength: "50", value: existing?.name || "", placeholder: "예: 인스머스의 그림자" });
-  const job = jobEditor(existing?.jobCategories || []);
+  const src = existing || prefill || {};
+  const nameInput = el("input", { type: "text", maxlength: "50", value: src.name || "", placeholder: "예: 인스머스의 그림자" });
+  const job = jobEditor(src.jobCategories || []);
   const storyInput = el("textarea", { maxlength: "2000", placeholder: "전체 줄거리 요약. (만든 뒤 상세 페이지에서 '스토리 맵'으로 카드·연결을 추가할 수 있어요)" });
-  storyInput.value = existing?.storyline || "";
+  storyInput.value = src.storyline || "";
   const visSelect = el("select");
-  Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...((existing?.visibility || "public") === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
+  Object.entries(VISIBILITY).forEach(([k, v]) => visSelect.appendChild(el("option", { value: k, ...((src.visibility || "public") === k ? { selected: "selected" } : {}) }, `${v.label} — ${v.desc}`)));
 
   openModal({
     title: existing ? "템플릿 편집" : "템플릿 만들기",
@@ -1502,6 +1555,7 @@ function openTemplateModal(existing) {
           } else {
             const ref = await addDoc(collection(db, "templates"), {
               ...payload,
+              storyNodes: prefill?.storyNodes || [],
               ownerUid: meInfo.uid, ownerName: meInfo.name, ownerPhoto: meInfo.photo,
               createdAt: serverTimestamp(),
             });
