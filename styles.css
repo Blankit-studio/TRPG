@@ -249,6 +249,8 @@ a { color: inherit; text-decoration: none; }
 .roll-detail { color: var(--muted); font-size: 12px; }
 .roll-total { font-weight: 800; color: var(--blue); font-size: 15px; }
 
+.guest-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
 .dice-quick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .dice-btn { font-variant-numeric: tabular-nums; }
 .play-bar { display: flex; flex-direction: column; gap: 8px; }

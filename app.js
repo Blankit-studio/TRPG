@@ -693,6 +693,9 @@ function templateCard(data) {
 }
 
 // ── 캠페인 상세 (실시간) ──────────────────────────────────────
+const campaignTabs = {};                                  // 캠페인별 마지막 탭 (재렌더 시 유지)
+const sessionJoinKey = (id) => "trpg_session_joined_" + id; // 닉네임 참가 여부 (브라우저 기억)
+
 function renderCampaign(view, id) {
   view.innerHTML = "";
   const wrap = el("div");
@@ -702,7 +705,7 @@ function renderCampaign(view, id) {
 
   let data = null;
   let sessions = [], applications = [], characters = [];
-  const state = { tab: "info" };
+  const state = { tab: campaignTabs[id] || "info" };
 
   const isGM = () => currentUser && data && currentUser.uid === data.gmUid;
   const amMember = () => currentUser && data && (data.memberUids || []).includes(currentUser.uid);
@@ -748,7 +751,7 @@ function renderCampaign(view, id) {
     ];
     if (isGM()) tabDefs.push(["applicants", `📨 신청 (${applications.filter((a) => a.status === "pending").length})`]);
     tabDefs.forEach(([key, label]) => {
-      tabs.appendChild(el("button", { class: "tab" + (state.tab === key ? " active" : ""), onclick: () => { state.tab = key; render(); } }, label));
+      tabs.appendChild(el("button", { class: "tab" + (state.tab === key ? " active" : ""), onclick: () => { state.tab = key; campaignTabs[id] = key; render(); } }, label));
     });
     wrap.appendChild(tabs);
 
@@ -823,16 +826,46 @@ function renderCampaign(view, id) {
 
   // ── 플레이 탭 (실시간 주사위 + 채팅) ──
   function renderPlayTab(panel) {
-    const canPlay = isGM() || amMember();
+    // 정식 멤버가 아니어도 닉네임만 정하면 세션에 참가(주사위·채팅) 가능
+    const joinedAsGuest = !!currentUser && !!localStorage.getItem(sessionJoinKey(id));
+    const canPlay = isGM() || amMember() || joinedAsGuest;
     panel.appendChild(
       el("div", { class: "mode-hint" }, canPlay
         ? "🎲 주사위 표기(예: 2d6+3, d20)를 입력하거나 빠른 버튼을 눌러 굴리세요. 결과는 모든 참여자에게 실시간으로 공유됩니다."
-        : "🔒 이 테이블의 멤버만 주사위를 굴리고 채팅할 수 있습니다. 관전만 가능합니다.")
+        : "👋 로그인 없이 닉네임만 입력하면 이 세션의 주사위·채팅에 바로 참여할 수 있어요.")
     );
 
     const log = el("div", { class: "play-log", id: "playLog" });
     panel.appendChild(log);
     renderLog(log);
+
+    if (!canPlay) {
+      // 닉네임 참가 박스
+      const nickIn = el("input", { type: "text", maxlength: "20", class: "play-input", placeholder: "닉네임 (예: 방랑자 렌)" });
+      nickIn.value = isMember() ? "" : getGuestName();
+      const join = async () => {
+        if (!isMember()) {
+          const n = nickIn.value.trim();
+          if (!n) { toast("닉네임을 입력하세요.", true); return; }
+          setGuestName(n);
+        }
+        // 익명 로그인 완료 시 auth 재렌더가 먼저 돌 수 있으므로, 참가 상태를 먼저 기록
+        campaignTabs[id] = "play";
+        localStorage.setItem(sessionJoinKey(id), "1");
+        const user = await ensureUser();
+        if (!user) { localStorage.removeItem(sessionJoinKey(id)); return; }
+        render();
+        toast("세션에 참가했습니다. 즐거운 플레이 되세요!");
+      };
+      nickIn.addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
+      panel.appendChild(
+        el("div", { class: "play-bar" }, [
+          isMember()
+            ? el("div", { class: "play-row" }, [el("button", { class: "btn btn-primary", onclick: join }, `🎲 ${currentUser.displayName || "내 계정"}으로 세션 참가`)])
+            : el("div", { class: "play-row" }, [nickIn, el("button", { class: "btn btn-primary", onclick: join }, "🎲 세션 참가")]),
+        ])
+      );
+    }
 
     if (canPlay) {
       // 빠른 주사위 버튼
@@ -852,11 +885,26 @@ function renderCampaign(view, id) {
         ])
       );
 
-      // AI 진행 보조 (멤버/GM, 각자 무료 Gemini 키 사용)
-      panel.appendChild(buildAiPanel({
-        getContext: () => campaignAiContext(data, storyNodesFrom(data), playLog),
-        onShare: (text) => sendChat(text),
-      }));
+      // 닉네임 참가자: 이름 표시 + 변경
+      if (currentUser?.isAnonymous) {
+        panel.appendChild(
+          el("div", { class: "guest-bar" }, [
+            el("span", { class: "card-sub", text: `참가 중: ${getGuestName() || "게스트"}` }),
+            el("button", { class: "btn btn-sm btn-ghost", onclick: () => {
+              const n = prompt("새 닉네임을 입력하세요.", getGuestName());
+              if (n && n.trim()) { setGuestName(n.trim()); render(); toast("닉네임을 변경했습니다."); }
+            } }, "닉네임 변경"),
+          ])
+        );
+      }
+
+      // AI 진행 보조 (GM·정식 멤버, 각자 무료 Gemini 키 사용)
+      if (isGM() || amMember()) {
+        panel.appendChild(buildAiPanel({
+          getContext: () => campaignAiContext(data, storyNodesFrom(data), playLog),
+          onShare: (text) => sendChat(text),
+        }));
+      }
     }
   }
   function renderLog(log) {
