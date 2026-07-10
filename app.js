@@ -718,6 +718,11 @@ function renderCampaign(view, id) {
     // 헤더
     const actions = el("div", { class: "schedule-actions" });
     if (isGM()) {
+      if (data.status !== "done") {
+        actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => { if (confirm("이 캠페인의 세션을 종료(완료 처리)할까요? 나중에 다시 열 수 있습니다.")) setStatus("done", "세션을 종료했습니다."); } }, "🏁 세션 종료"));
+      } else {
+        actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => setStatus("recruiting", "다시 모집을 시작했습니다.") }, "↩️ 다시 열기"));
+      }
       actions.appendChild(el("button", { class: "btn btn-sm", onclick: () => openCampaignModal(data) }, "⚙️ 설정"));
     }
     actions.appendChild(el("button", { class: "btn btn-sm btn-ghost", onclick: () => copyShareLink("#/c/" + id) }, "🔗 공유"));
@@ -1066,6 +1071,10 @@ function renderCampaign(view, id) {
     try { await updateDoc(doc(db, "campaigns", id, "applications", a.id), { status }); }
     catch (e) { console.error(e); toast("변경 실패: " + (e.code || e.message), true); }
   }
+  async function setStatus(status, msg) {
+    try { await updateDoc(doc(db, "campaigns", id), { status, updatedAt: serverTimestamp() }); toast(msg); }
+    catch (e) { console.error(e); toast("변경 실패: " + (e.code || e.message), true); }
+  }
   async function deleteSession(sid) {
     if (!confirm("이 세션 기록을 삭제할까요?")) return;
     try { await deleteDoc(doc(db, "campaigns", id, "sessions", sid)); toast("삭제했습니다."); }
@@ -1330,6 +1339,17 @@ async function deleteTemplate(id, ownerUid) {
   catch (e) { console.error(e); toast("삭제 실패: " + (e.code || e.message), true); }
 }
 
+// 캠페인 + 하위 컬렉션(세션·신청·플레이로그) 전체 삭제 (best-effort)
+async function deleteCampaignFull(id) {
+  for (const sub of ["rolls", "applications", "sessions"]) {
+    try {
+      const snap = await getDocs(collection(db, "campaigns", id, sub));
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref).catch(() => {})));
+    } catch (e) { console.warn("하위 컬렉션 삭제 실패", sub, e); }
+  }
+  await deleteDoc(doc(db, "campaigns", id));
+}
+
 // ── 모달: 캠페인 생성/수정 ────────────────────────────────────
 function openCampaignModal(existing, prefill) {
   if (!isMember()) { toast("캠페인을 만들려면 Google 로그인이 필요합니다.", true); doLogin(); return; }
@@ -1368,6 +1388,11 @@ function openCampaignModal(existing, prefill) {
       ]),
     ],
     actions: [
+      isEdit ? el("button", { class: "btn btn-danger", style: "margin-right:auto", onclick: async () => {
+        if (!confirm(`'${existing.title}' 캠페인을 삭제할까요?\n세션 기록 · 신청 · 플레이 로그가 모두 지워지며 되돌릴 수 없습니다.`)) return;
+        try { await deleteCampaignFull(existing.id); closeModal(); toast("캠페인을 삭제했습니다."); location.hash = "#/me"; }
+        catch (e) { console.error(e); toast("삭제 실패: " + (e.code || e.message), true); }
+      } }, "🗑️ 캠페인 삭제") : null,
       el("button", { class: "btn btn-ghost", onclick: closeModal }, "취소"),
       el("button", { class: "btn btn-primary", onclick: async () => {
         const title = titleInput.value.trim();
