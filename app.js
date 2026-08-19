@@ -1255,7 +1255,7 @@ async function renderTemplates(view) {
   view.appendChild(
     el("section", { class: "hero compact" }, [
       el("h1", { text: "플레이 설정 템플릿" }),
-      el("p", { text: "제목·직업 카테고리·스토리 라인을 템플릿으로 저장해 두면, 캠페인을 열 때 그대로 불러올 수 있습니다." }),
+      el("p", { text: "제목·직업 카테고리·스토리 맵을 템플릿으로 저장해 두면, 캠페인을 열 때 그대로 불러올 수 있습니다." }),
       isMember()
         ? el("button", { class: "btn btn-primary", onclick: () => openTemplateModal() }, "＋ 템플릿 만들기")
         : el("button", { class: "btn btn-google", onclick: doLogin }, [googleIcon(), "로그인하고 만들기"]),
@@ -1617,7 +1617,7 @@ function openTemplateModal(existing, prefill) {
 
   openModal({
     title: existing ? "템플릿 편집" : "템플릿 만들기",
-    sub: "플레이 설정을 제목·직업 카테고리·스토리 라인으로 간단히 정리하세요.",
+    sub: "플레이 설정을 제목·직업 카테고리·스토리로 간단히 정리하세요. (스토리 맵은 저장 후 상세 페이지에서 확장)",
     wide: true,
     body: [
       el("div", { class: "field" }, [el("label", { text: "템플릿 제목" }), nameInput]),

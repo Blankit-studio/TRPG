@@ -30,6 +30,8 @@ jobs:
         run: |
           mkdir dist
           cp index.html styles.css app.js firebase-config.js dist/
+          # 캐시 무효화: 배포 커밋 SHA를 정적 자산 링크에 버전 쿼리로 추가
+          sed -i "s#href=\"styles.css\"#href=\"styles.css?v=${GITHUB_SHA}\"#; s#src=\"app.js\"#src=\"app.js?v=${GITHUB_SHA}\"#" dist/index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
