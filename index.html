@@ -8,6 +8,16 @@
   <link rel="preconnect" href="https://www.gstatic.com" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M31,51L13,51L13,13L51,13L51,33' fill='none' stroke='%23ffffff' stroke-width='6.5' stroke-linecap='round' stroke-linejoin='round'/><path d='M51,39L51,51L37,51' fill='none' stroke='%2300abfc' stroke-width='6.5' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // 테마를 첫 페인트 전에 적용 — 라이트 모드 사용자의 화면 깜빡임(FOUC) 방지.
+    // app.js 로드가 실패해도 테마는 유지됩니다.
+    try {
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("dicelog_theme") === "light" ? "light" : "dark"
+      );
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <!-- 상단 헤더 -->
@@ -50,5 +60,17 @@
   </footer>
 
   <script type="module" src="app.js"></script>
+  <script>
+    // 앱이 뜨지 않으면(네트워크 차단·CDN 장애 등) 빈 화면 대신 안내를 표시
+    setTimeout(function () {
+      if (window.__trpgReady) return;
+      var v = document.getElementById("view");
+      if (v && !v.children.length) {
+        v.innerHTML =
+          '<div class="empty">앱을 불러오지 못했습니다. 네트워크 연결을 확인한 뒤 새로고침해 주세요.<br>' +
+          '<small>광고 차단기나 사내 네트워크가 Firebase 스크립트를 차단하고 있을 수 있습니다.</small></div>';
+      }
+    }, 8000);
+  </script>
 </body>
 </html>

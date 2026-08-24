@@ -8,7 +8,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion,
+  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, onSnapshot, serverTimestamp, query, where, orderBy, limit,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -805,6 +805,12 @@ function renderCampaign(view, id) {
           el("img", { class: "avatar avatar-sm", src: m.photo || fallbackAvatar(m.name), alt: "" }),
           el("span", { text: m.name || "익명" }),
           m.uid === data.gmUid ? el("span", { class: "mini-badge", text: "GM" }) : (m.job ? el("span", { class: "mini-badge", text: m.job }) : null),
+          // GM 은 파티원을 제외할 수 있음
+          isGM() && m.uid !== data.gmUid
+            ? el("button", { class: "chip-x", title: "파티에서 제외", "aria-label": `${m.name || "멤버"} 제외`, onclick: () => {
+                if (confirm(`${m.name || "이 사용자"} 님을 파티에서 제외할까요?`)) removeMember(m.uid, m.name);
+              } }, "\u00d7")
+            : null,
         ])
       );
     });
@@ -880,7 +886,7 @@ function renderCampaign(view, id) {
 
       // 입력줄
       const diceInput = el("input", { type: "text", placeholder: "주사위 표기 (예: 2d6+3)", class: "play-input" });
-      const chatInput = el("input", { type: "text", placeholder: "채팅 메시지…", class: "play-input" });
+      const chatInput = el("input", { type: "text", maxlength: "500", placeholder: "채팅 메시지…", class: "play-input" });
       diceInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { doRoll(diceInput.value); diceInput.value = ""; } });
       chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { sendChat(chatInput.value); chatInput.value = ""; } });
       panel.appendChild(
@@ -1053,21 +1059,48 @@ function renderCampaign(view, id) {
     try { await deleteDoc(doc(db, "campaigns", id, "applications", currentUser.uid)); toast("신청을 취소했습니다."); }
     catch (e) { console.error(e); toast("취소 실패: " + (e.code || e.message), true); }
   }
+  const membersWithout = (uid) => (data.members || []).filter((m) => m && m.uid !== uid);
+
   async function acceptApplication(a) {
+    const already = (data.memberUids || []).includes(a.byUid);
     const cap = data.maxPlayers || 0;
     const cur = (data.memberUids || []).length;
-    if (cap && cur >= cap && !confirm(`정원(${cap}명)이 이미 찼습니다. 그래도 수락할까요?`)) return;
+    if (!already && cap && cur >= cap && !confirm(`정원(${cap}명)이 이미 찼습니다. 그래도 수락할까요?`)) return;
     try {
+      // arrayUnion 은 객체 전체가 같아야 중복 제거되므로(직업·이름 변경 시 중복 발생)
+      // uid 기준으로 직접 병합해 저장
       await updateDoc(doc(db, "campaigns", id), {
-        memberUids: arrayUnion(a.byUid),
-        members: arrayUnion({ uid: a.byUid, name: a.byName || "익명", photo: a.byPhoto || "", job: a.job || "" }),
+        memberUids: Array.from(new Set([...(data.memberUids || []), a.byUid])),
+        members: [...membersWithout(a.byUid), { uid: a.byUid, name: a.byName || "익명", photo: a.byPhoto || "", job: a.job || "" }],
         updatedAt: serverTimestamp(),
       });
       await updateDoc(doc(db, "campaigns", id, "applications", a.id), { status: "accepted" });
       toast(`${a.byName} 님을 멤버로 수락했습니다.`);
     } catch (e) { console.error(e); toast("수락 실패: " + (e.code || e.message), true); }
   }
+
+  // 멤버 제외 (GM 은 제외 불가)
+  async function removeMember(uid, name) {
+    if (uid === data.gmUid) { toast("GM 은 제외할 수 없습니다.", true); return false; }
+    try {
+      await updateDoc(doc(db, "campaigns", id), {
+        memberUids: (data.memberUids || []).filter((u) => u !== uid),
+        members: membersWithout(uid),
+        updatedAt: serverTimestamp(),
+      });
+      toast(`${name || "멤버"} 님을 파티에서 제외했습니다.`);
+      return true;
+    } catch (e) { console.error(e); toast("제외 실패: " + (e.code || e.message), true); return false; }
+  }
+
+  // 수락 상태에서 되돌리거나 거절하면 파티 멤버 자격도 함께 해제
   async function setApplicationStatus(a, status) {
+    const isMemberNow = (data.memberUids || []).includes(a.byUid) && a.byUid !== data.gmUid;
+    if (isMemberNow && status !== "accepted") {
+      if (!confirm(`${a.byName || "이 사용자"} 님을 파티에서 제외할까요?`)) return;
+      const ok = await removeMember(a.byUid, a.byName);
+      if (!ok) return;
+    }
     try { await updateDoc(doc(db, "campaigns", id, "applications", a.id), { status }); }
     catch (e) { console.error(e); toast("변경 실패: " + (e.code || e.message), true); }
   }
@@ -1094,7 +1127,7 @@ function renderCampaign(view, id) {
     } catch (e) { console.error(e); toast("주사위 실패: " + (e.code || e.message), true); }
   }
   async function sendChat(text) {
-    text = (text || "").trim();
+    text = (text || "").trim().slice(0, 2000); // 입력칸을 거치지 않는 경로(AI 공유 등) 대비
     if (!text) return;
     const user = await ensureUser();
     if (!user) return;
@@ -1923,5 +1956,6 @@ function initTheme() {
 }
 
 // ── 시작 ───────────────────────────────────────────────────────
+window.__trpgReady = true;   // index.html 의 로드 실패 안내를 해제
 initTheme();
 boot();

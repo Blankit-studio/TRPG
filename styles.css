@@ -210,6 +210,11 @@ a { color: inherit; text-decoration: none; }
 /* ── 멤버 / 신청 ── */
 .member-list { display: flex; gap: 8px; flex-wrap: wrap; }
 .member-chip { display: flex; align-items: center; gap: 7px; padding: 6px 10px 6px 6px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 600; }
+.chip-x {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 2px; margin-left: 2px;
+}
+.chip-x:hover { color: var(--text); }
 .apply-box { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .applicant-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; }
 .applicant-item .who { font-weight: 800; font-size: 14px; }
