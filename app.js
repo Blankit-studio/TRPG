@@ -202,6 +202,16 @@ function jobEditor(initial = []) {
   };
 }
 
+// 안내가 있는 빈 상태 — 아이콘 · 제목 · 설명 · (선택) 행동 버튼
+function emptyState({ icon = "📭", title, desc, action }) {
+  return el("div", { class: "empty" }, [
+    el("div", { class: "empty-icon", text: icon }),
+    title ? el("div", { class: "empty-title", text: title }) : null,
+    desc ? el("div", { class: "empty-desc", text: desc }) : null,
+    action || null,
+  ]);
+}
+
 function toast(msg, isError = false) {
   const t = $("#toast");
   t.textContent = msg;
@@ -520,7 +530,7 @@ async function renderHome(view) {
   const sec = el("div");
   const filterBar = el("div", { class: "filter-bar" });
   let curFilter = "all";
-  const cards = el("div", { class: "cards", id: "cards" }, [el("div", { class: "empty", text: "불러오는 중…" })]);
+  const cards = el("div", { class: "cards", id: "cards" }, [el("div", { class: "skeleton skeleton-card" }), el("div", { class: "skeleton skeleton-card" }), el("div", { class: "skeleton skeleton-card" })]);
 
   const renderFilter = (docs) => {
     filterBar.innerHTML = "";
@@ -537,7 +547,10 @@ async function renderHome(view) {
   const renderCards = (docs) => {
     const list = curFilter === "all" ? docs : docs.filter((d) => (d.status || "recruiting") === curFilter);
     cards.innerHTML = "";
-    if (!list.length) { cards.appendChild(el("div", { class: "empty", text: "해당하는 캠페인이 없습니다." })); return; }
+    if (!list.length) {
+      cards.appendChild(emptyState({ icon: "🔍", title: "해당하는 캠페인이 없습니다", desc: "다른 상태로 필터를 바꾸거나, 직접 캠페인을 열어 플레이어를 모아보세요." }));
+      return;
+    }
     list.forEach((data) => cards.appendChild(campaignCard(data)));
   };
 
@@ -554,11 +567,17 @@ async function renderHome(view) {
     $("#homeCount").textContent = `${docs.length}개`;
     renderFilter(docs);
     renderCards(docs);
-    if (!docs.length) cards.appendChild(el("div", { class: "empty", text: "아직 공개된 캠페인이 없습니다. 첫 캠페인을 모집해 보세요!" }));
+    if (!docs.length) cards.appendChild(emptyState({
+      icon: "🎲", title: "아직 공개된 캠페인이 없습니다",
+      desc: "첫 번째 GM이 되어 캠페인을 열어보세요. 템플릿을 쓰면 몇 번의 클릭으로 시작할 수 있습니다.",
+      action: isMember()
+        ? el("button", { class: "btn btn-primary", onclick: () => openCampaignModal() }, "＋ 캠페인 모집하기")
+        : el("a", { class: "btn", href: "#/templates" }, "템플릿 둘러보기"),
+    }));
   } catch (e) {
     console.error(e);
     cards.innerHTML = "";
-    cards.appendChild(el("div", { class: "empty", text: "목록을 불러오지 못했습니다. Firestore 보안 규칙을 확인하세요." }));
+    cards.appendChild(emptyState({ icon: "⚠️", title: "목록을 불러오지 못했습니다", desc: "네트워크 상태를 확인하거나 잠시 후 다시 시도해 주세요." }));
   }
 }
 
@@ -606,7 +625,7 @@ async function renderMe(view) {
   );
 
   const mkBlock = (title) => {
-    const box = el("div", { class: "cards" }, [el("div", { class: "empty", text: "불러오는 중…" })]);
+    const box = el("div", { class: "cards" }, [el("div", { class: "skeleton skeleton-card" }), el("div", { class: "skeleton skeleton-card" })]);
     view.appendChild(el("h3", { class: "block-title", text: title }));
     view.appendChild(box);
     return box;
@@ -616,34 +635,54 @@ async function renderMe(view) {
   const charBox = mkBlock("🧙 내 캐릭터");
   const tplBox = mkBlock("📜 내 템플릿");
 
-  const fill = (box, docs, render, emptyMsg) => {
+  const fill = (box, docs, render, empty) => {
     box.innerHTML = "";
-    if (!docs.length) { box.appendChild(el("div", { class: "empty", text: emptyMsg })); return; }
+    if (!docs.length) { box.appendChild(emptyState(empty)); return; }
     docs.forEach((d) => box.appendChild(render(d)));
+  };
+  const failed = (box) => {
+    box.innerHTML = "";
+    box.appendChild(emptyState({ icon: "⚠️", title: "불러오지 못했습니다", desc: "네트워크 상태를 확인한 뒤 새로고침해 주세요." }));
   };
 
   try {
     const gmSnap = await getDocs(query(collection(db, "campaigns"), where("gmUid", "==", uid)));
-    fill(gmBox, gmSnap.docs.map((d) => ({ id: d.id, ...d.data() })), campaignCard, "아직 만든 캠페인이 없습니다.");
-  } catch (e) { console.error(e); gmBox.innerHTML = ""; gmBox.appendChild(el("div", { class: "empty", text: "불러오기 실패" })); }
+    fill(gmBox, gmSnap.docs.map((d) => ({ id: d.id, ...d.data() })), campaignCard, {
+      icon: "🎙️", title: "아직 만든 캠페인이 없습니다",
+      desc: "캠페인을 열면 플레이어 모집 · 세션 기록 · 실시간 주사위를 한곳에서 관리할 수 있어요.",
+      action: el("button", { class: "btn btn-primary", onclick: () => openCampaignModal() }, "＋ 캠페인 만들기"),
+    });
+  } catch (e) { console.error(e); failed(gmBox); }
 
   try {
     const memSnap = await getDocs(query(collection(db, "campaigns"), where("memberUids", "array-contains", uid)));
     const joined = memSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.gmUid !== uid);
-    fill(playBox, joined, campaignCard, "참여 중인 캠페인이 없습니다. 모집 게시판에서 신청해 보세요!");
-  } catch (e) { console.error(e); playBox.innerHTML = ""; playBox.appendChild(el("div", { class: "empty", text: "불러오기 실패" })); }
+    fill(playBox, joined, campaignCard, {
+      icon: "🎲", title: "참여 중인 캠페인이 없습니다",
+      desc: "모집 게시판에서 마음에 드는 테이블에 신청해 보세요.",
+      action: el("a", { class: "btn", href: "#/" }, "모집 둘러보기"),
+    });
+  } catch (e) { console.error(e); failed(playBox); }
 
   try {
     const charSnap = await getDocs(query(collection(db, "characters"), where("ownerUid", "==", uid)));
     const chars = charSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     chars.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-    fill(charBox, chars, characterCard, "아직 캐릭터가 없습니다. ＋캐릭터로 시트를 만들어 보세요.");
-  } catch (e) { console.error(e); charBox.innerHTML = ""; charBox.appendChild(el("div", { class: "empty", text: "불러오기 실패" })); }
+    fill(charBox, chars, characterCard, {
+      icon: "🧙", title: "아직 캐릭터가 없습니다",
+      desc: "능력치 · 인벤토리 · 배경을 담은 시트를 만들어 캠페인에 연결할 수 있어요.",
+      action: el("button", { class: "btn btn-primary", onclick: () => openCharacterModal() }, "＋ 캐릭터 만들기"),
+    });
+  } catch (e) { console.error(e); failed(charBox); }
 
   try {
     const tplSnap = await getDocs(query(collection(db, "templates"), where("ownerUid", "==", uid)));
-    fill(tplBox, tplSnap.docs.map((d) => ({ id: d.id, ...d.data() })), templateCard, "아직 템플릿이 없습니다.");
-  } catch (e) { console.error(e); tplBox.innerHTML = ""; tplBox.appendChild(el("div", { class: "empty", text: "불러오기 실패" })); }
+    fill(tplBox, tplSnap.docs.map((d) => ({ id: d.id, ...d.data() })), templateCard, {
+      icon: "📜", title: "아직 템플릿이 없습니다",
+      desc: "직업 구성과 스토리를 템플릿으로 저장해 두면 새 캠페인을 빠르게 열 수 있어요.",
+      action: el("a", { class: "btn", href: "#/templates" }, "예시 템플릿 보기"),
+    });
+  } catch (e) { console.error(e); failed(tplBox); }
 }
 
 function characterCard(data) {
@@ -700,7 +739,7 @@ function renderCampaign(view, id) {
   view.innerHTML = "";
   const wrap = el("div");
   view.appendChild(wrap);
-  const statusBox = el("div", {}, [el("div", { class: "empty", text: "캠페인을 불러오는 중…" })]);
+  const statusBox = el("div", {}, [el("div", { class: "skeleton skeleton-card", style: "height:180px" })]);
   wrap.appendChild(statusBox);
 
   let data = null;
@@ -920,7 +959,10 @@ function renderCampaign(view, id) {
   }
   function renderLog(log) {
     log.innerHTML = "";
-    if (!playLog.length) { log.appendChild(el("div", { class: "empty", text: "아직 기록이 없습니다. 첫 주사위를 굴려보세요!" })); return; }
+    if (!playLog.length) {
+      log.appendChild(emptyState({ icon: "🎲", title: "아직 기록이 없습니다", desc: "첫 주사위를 굴리거나 인사를 건네보세요." }));
+      return;
+    }
     playLog.forEach((r) => {
       const mine = currentUser && r.byUid === currentUser.uid;
       if (r.type === "chat") {
@@ -945,7 +987,14 @@ function renderCampaign(view, id) {
   // ── 세션 기록 탭 ──
   function renderSessionsTab(panel) {
     if (isGM()) panel.appendChild(el("button", { class: "btn btn-sm btn-primary", style: "margin-bottom:14px", onclick: () => openSessionModal(id, sessions.length + 1) }, "＋ 세션 기록 추가"));
-    if (!sessions.length) { panel.appendChild(el("div", { class: "empty", text: "아직 기록된 세션이 없습니다." })); return; }
+    if (!sessions.length) {
+      panel.appendChild(emptyState({
+        icon: "📖", title: "아직 기록된 세션이 없습니다",
+        desc: isGM() ? "회차별로 있었던 일을 남겨두면 다음 세션 준비가 훨씬 쉬워집니다."
+                     : "GM이 세션 일지를 남기면 여기에 표시됩니다.",
+      }));
+      return;
+    }
     sessions.forEach((s) => {
       panel.appendChild(
         el("div", { class: "session-item" }, [
@@ -971,7 +1020,13 @@ function renderCampaign(view, id) {
     if (currentUser && (isGM() || amMember())) {
       panel.appendChild(el("button", { class: "btn btn-sm btn-primary", style: "margin-bottom:14px", onclick: () => openCharacterModal({ campaignId: id, system: data.system, templateId: data.templateId, onSaved: loadCampaignCharacters }) }, "＋ 이 캠페인에 캐릭터 추가"));
     }
-    if (!characters.length) { panel.appendChild(el("div", { class: "empty", text: "아직 등록된 캐릭터가 없습니다." })); return; }
+    if (!characters.length) {
+      panel.appendChild(emptyState({
+        icon: "🧙", title: "아직 등록된 캐릭터가 없습니다",
+        desc: "이 캠페인에 참여하는 캐릭터 시트를 만들면 파티원 모두가 볼 수 있어요.",
+      }));
+      return;
+    }
     const grid = el("div", { class: "cards" });
     characters.forEach((c) => grid.appendChild(characterCard(c)));
     panel.appendChild(grid);
@@ -979,7 +1034,14 @@ function renderCampaign(view, id) {
 
   // ── 신청 관리 탭 (GM) ──
   function renderApplicantsTab(panel) {
-    if (!applications.length) { panel.appendChild(el("div", { class: "empty", text: "아직 신청자가 없습니다." })); return; }
+    if (!applications.length) {
+      panel.appendChild(emptyState({
+        icon: "📨", title: "아직 신청자가 없습니다",
+        desc: "공유 링크를 보내 플레이어를 모아보세요.",
+        action: el("button", { class: "btn", onclick: () => copyShareLink("#/c/" + id) }, "🔗 모집 링크 복사"),
+      }));
+      return;
+    }
     applications.forEach((a) => {
       const ap = APP_STATUS[a.status] || APP_STATUS.pending;
       panel.appendChild(
@@ -1144,14 +1206,16 @@ function renderCampaign(view, id) {
   let playLog = [];
   track(onSnapshot(doc(db, "campaigns", id),
     (snap) => {
-      if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "존재하지 않는 캠페인입니다." })); return; }
+      if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(emptyState({ icon: "🕳️", title: "존재하지 않는 캠페인입니다", desc: "삭제되었거나 주소가 잘못되었을 수 있어요.", action: el("a", { class: "btn", href: "#/" }, "모집 둘러보기") })); return; }
       data = { id: snap.id, ...snap.data() };
       render();
     },
     (err) => {
       console.error(err);
       wrap.innerHTML = "";
-      wrap.appendChild(el("div", { class: "empty", text: err.code === "permission-denied" ? "🔒 비공개 캠페인이거나 접근 권한이 없습니다." : "캠페인을 불러오지 못했습니다." }));
+      wrap.appendChild((err.code === "permission-denied"
+        ? emptyState({ icon: "🔒", title: "비공개 캠페인입니다", desc: "GM 이나 참여 멤버만 볼 수 있어요. 초대를 받았다면 로그인 상태를 확인해 주세요." })
+        : emptyState({ icon: "⚠️", title: "캠페인을 불러오지 못했습니다", desc: "네트워크 상태를 확인한 뒤 새로고침해 주세요." })));
     }
   ));
   track(onSnapshot(query(collection(db, "campaigns", id, "sessions"), orderBy("no", "desc")),
@@ -1207,11 +1271,11 @@ function renderCharacter(view, id) {
   view.innerHTML = "";
   const wrap = el("div");
   view.appendChild(wrap);
-  wrap.appendChild(el("div", { class: "empty", text: "캐릭터를 불러오는 중…" }));
+  wrap.appendChild(el("div", { class: "skeleton skeleton-card", style: "height:180px" }));
 
   track(onSnapshot(doc(db, "characters", id),
     (snap) => {
-      if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "존재하지 않는 캐릭터입니다." })); return; }
+      if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(emptyState({ icon: "🕳️", title: "존재하지 않는 캐릭터입니다", desc: "삭제되었거나 주소가 잘못되었을 수 있어요." })); return; }
       const data = { id: snap.id, ...snap.data() };
       const isOwner = currentUser && currentUser.uid === data.ownerUid;
       wrap.innerHTML = "";
@@ -1272,7 +1336,9 @@ function renderCharacter(view, id) {
     (err) => {
       console.error(err);
       wrap.innerHTML = "";
-      wrap.appendChild(el("div", { class: "empty", text: err.code === "permission-denied" ? "🔒 비공개 캐릭터입니다." : "불러오지 못했습니다." }));
+      wrap.appendChild((err.code === "permission-denied"
+        ? emptyState({ icon: "🔒", title: "비공개 캐릭터입니다", desc: "시트를 만든 플레이어만 볼 수 있어요." })
+        : emptyState({ icon: "⚠️", title: "불러오지 못했습니다", desc: "네트워크 상태를 확인한 뒤 새로고침해 주세요." })));
     }
   ));
 }
@@ -1300,7 +1366,7 @@ async function renderTemplates(view) {
   EXAMPLE_TEMPLATES.forEach((ex) => exBox.appendChild(exampleCard(ex)));
   view.appendChild(exBox);
 
-  const cards = el("div", { class: "cards" }, [el("div", { class: "empty", text: "불러오는 중…" })]);
+  const cards = el("div", { class: "cards" }, [el("div", { class: "skeleton skeleton-card" }), el("div", { class: "skeleton skeleton-card" })]);
   view.appendChild(el("div", { class: "section-title" }, [el("h2", { text: "공개 템플릿" })]));
   view.appendChild(cards);
 
@@ -1309,11 +1375,14 @@ async function renderTemplates(view) {
     const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     docs.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
     cards.innerHTML = "";
-    if (!docs.length) cards.appendChild(el("div", { class: "empty", text: "아직 공개 템플릿이 없습니다." }));
+    if (!docs.length) cards.appendChild(emptyState({
+      icon: "📜", title: "아직 공개 템플릿이 없습니다",
+      desc: "위의 예시 템플릿으로 시작하거나, 직접 만들어 공개해 보세요.",
+    }));
     docs.forEach((d) => cards.appendChild(templateCard(d)));
   } catch (e) {
     console.error(e); cards.innerHTML = "";
-    cards.appendChild(el("div", { class: "empty", text: "목록을 불러오지 못했습니다." }));
+    cards.appendChild(emptyState({ icon: "⚠️", title: "목록을 불러오지 못했습니다", desc: "네트워크 상태를 확인한 뒤 새로고침해 주세요." }));
   }
 }
 
@@ -1321,10 +1390,10 @@ function renderTemplate(view, id) {
   view.innerHTML = "";
   const wrap = el("div");
   view.appendChild(wrap);
-  wrap.appendChild(el("div", { class: "empty", text: "템플릿을 불러오는 중…" }));
+  wrap.appendChild(el("div", { class: "skeleton skeleton-card", style: "height:180px" }));
 
   getDoc(doc(db, "templates", id)).then((snap) => {
-    if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "존재하지 않는 템플릿입니다." })); return; }
+    if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(emptyState({ icon: "🕳️", title: "존재하지 않는 템플릿입니다", desc: "삭제되었거나 주소가 잘못되었을 수 있어요.", action: el("a", { class: "btn", href: "#/templates" }, "템플릿 둘러보기") })); return; }
     const data = { id: snap.id, ...snap.data() };
     const isOwner = currentUser && currentUser.uid === data.ownerUid;
     wrap.innerHTML = "";
@@ -1363,7 +1432,7 @@ function renderTemplate(view, id) {
     ]));
     wrap.appendChild(storyBox);
     reloadStory();
-  }).catch((e) => { console.error(e); wrap.innerHTML = ""; wrap.appendChild(el("div", { class: "empty", text: "불러오지 못했습니다." })); });
+  }).catch((e) => { console.error(e); wrap.innerHTML = ""; wrap.appendChild(emptyState({ icon: "⚠️", title: "불러오지 못했습니다", desc: "네트워크 상태를 확인한 뒤 새로고침해 주세요." })); });
 }
 async function deleteTemplate(id, ownerUid) {
   if (!currentUser || currentUser.uid !== ownerUid) return;
