@@ -16,3 +16,7 @@ Thumbs.db
 # Firebase
 .firebase/
 firebase-debug.log
+
+# 에뮬레이터 로그
+firestore-debug.log
+ui-debug.log

@@ -1,0 +1,14 @@
+{
+  "name": "trpg",
+  "private": true,
+  "description": "TRPG 웹사이트 — 정적 사이트 자체는 빌드가 필요 없으며, 이 파일은 보안 규칙 테스트용입니다.",
+  "type": "module",
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore --project demo-trpg \"node tests/firestore.rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "4.0.1",
+    "firebase": "11.10.0",
+    "firebase-tools": "14.27.0"
+  }
+}

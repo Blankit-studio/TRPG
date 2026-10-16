@@ -1,0 +1,26 @@
+# Firestore 보안 규칙 테스트 — 규칙이나 테스트가 바뀌면 에뮬레이터로 자동 검사합니다.
+# 보안 구멍(거부돼야 할 요청이 허용됨)이나 기능 회귀(앱 요청이 거부됨)가 생기면 실패합니다.
+name: Firestore rules test
+
+on:
+  push:
+    paths: [firestore.rules, tests/**, package.json, package-lock.json, .github/workflows/rules-test.yml]
+  pull_request:
+    paths: [firestore.rules, tests/**, package.json, package-lock.json]
+  workflow_dispatch:
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4   # Firestore 에뮬레이터 실행에 필요
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run test:rules

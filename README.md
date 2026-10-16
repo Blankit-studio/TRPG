@@ -57,6 +57,9 @@ export const firebaseConfig = {
 2. **규칙(Rules)** 탭으로 이동
 3. 이 저장소의 [`firestore.rules`](./firestore.rules) 내용을 붙여넣고 **게시**
 
+> ⚠️ GitHub Pages 배포는 사이트 파일만 올립니다. **`firestore.rules`를 수정했다면 콘솔에서 다시 게시**해야 적용됩니다.
+> (Firebase CLI가 있다면 `firebase deploy --only firestore:rules` 로도 게시할 수 있습니다.)
+
 > 일부 목록 조회는 단일 필드 인덱스로 동작합니다. 콘솔에서 인덱스 생성 안내가 뜨면 링크를 눌러 생성하세요.
 
 > 💡 직업 카드 이미지는 별도 Storage 없이 동작합니다. 파일을 선택하면 브라우저에서
@@ -107,8 +110,8 @@ python3 -m http.server 5173
 ## 🗂️ 데이터 구조 (Firestore)
 
 ```
-users/{uid}
-  name, photo, email, createdAt, updatedAt
+users/{uid}                          # 본인만 읽기/쓰기 가능
+  name, photo, createdAt, updatedAt
 
 templates/{templateId}                # 플레이 설정 템플릿
   ownerUid, ownerName, ownerPhoto
@@ -169,8 +172,21 @@ campaigns/{campaignId}                # 캠페인(모집 + 기록)
 | `app.js` | 앱 로직 (인증·라우팅·캠페인·세션·캐릭터·템플릿·실시간 주사위) |
 | `firebase-config.js` | **본인 Firebase 설정값 입력** |
 | `firestore.rules` | Firestore 보안 규칙 |
+| `tests/firestore.rules.test.mjs` | 보안 규칙 테스트 (`npm run test:rules`) |
 
 ---
+
+## 🧪 보안 규칙 테스트
+
+`firestore.rules` 는 에뮬레이터로 자동 검사합니다. 거부돼야 할 요청(타인 이메일 조회, 신청 상태 위조,
+비공개 캠페인 열람 등)과 앱이 실제로 보내는 요청(목록 조회, 신청, 닉네임 참가 주사위 등)을 함께 확인합니다.
+
+```bash
+npm install          # 테스트 도구만 설치 (사이트 자체는 빌드 불필요)
+npm run test:rules   # Java 21 필요 — Firestore 에뮬레이터를 띄워 테스트
+```
+
+규칙이나 테스트를 바꿔 푸시하면 GitHub Actions(`Firestore rules test`)에서도 자동 실행됩니다.
 
 ## 🤖 AI 진행 보조 (선택)
 

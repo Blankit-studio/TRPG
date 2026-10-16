@@ -8,7 +8,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, deleteField,
   collection, getDocs, onSnapshot, serverTimestamp, query, where, orderBy, limit,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -70,6 +70,24 @@ const EXAMPLE_TEMPLATES = [
 let app, auth, db;
 let currentUser = null;
 const subs = [];            // 현재 화면의 onSnapshot 해제 함수들
+
+// ── 브라우저 저장소 ────────────────────────────────────────────
+// 사이트 데이터(쿠키)를 차단한 브라우저에서는 localStorage 접근 자체가 예외를 던지므로
+// 모든 접근을 감싼다. 저장이 안 되면 설정이 기억되지 않을 뿐 앱은 정상 동작한다.
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  remove(k) { try { localStorage.removeItem(k); } catch {} },
+};
+// 저장 키 접두어 정리 (dicelog_ → trpg_) — 기존 사용자의 테마·AI 키가 유지되도록 한 번 옮김
+function migrateStorageKeys() {
+  for (const [from, to] of [["dicelog_theme", "trpg_theme"], ["dicelog_gemini_key", "trpg_gemini_key"]]) {
+    const v = store.get(from);
+    if (v === null) continue;
+    if (store.get(to) === null) store.set(to, v);
+    store.remove(from);
+  }
+}
 
 // ── DOM 헬퍼 ───────────────────────────────────────────────────
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -225,8 +243,8 @@ const isMember = () => currentUser && !currentUser.isAnonymous;
 
 // 게스트 표시 이름 (브라우저에 기억) — 익명 사용자 구분용
 const GUEST_NAME_LS = "trpg_guest_name";
-const getGuestName = () => (localStorage.getItem(GUEST_NAME_LS) || "").trim();
-const setGuestName = (n) => localStorage.setItem(GUEST_NAME_LS, (n || "").trim());
+const getGuestName = () => (store.get(GUEST_NAME_LS) || "").trim();
+const setGuestName = (n) => store.set(GUEST_NAME_LS, (n || "").trim());
 function displayNameFor(user) {
   if (user && !user.isAnonymous) return user.displayName || "이름없음";
   return getGuestName() || "게스트";
@@ -247,15 +265,15 @@ function rollDice(input) {
 }
 
 // ── AI 진행 보조 (무료 Gemini API · GM이 본인 키 사용) ─────────
-const AI_KEY_LS = "dicelog_gemini_key";
+const AI_KEY_LS = "trpg_gemini_key";
 const AI_MODEL = "gemini-2.0-flash"; // 무료 등급 모델 (콘솔에서 다른 모델로 교체 가능)
 const AI_SYSTEM =
   "당신은 숙련된 TRPG 게임 마스터(GM)를 돕는 보조자입니다. 주어진 게임 상황과 스토리 맥락을 활용해, " +
   "GM이 세션 도중 즉시 사용할 수 있는 구체적이고 간결한 제안을 한국어로 제공합니다. 실전에서 바로 읽어주거나 적용할 수 있게 " +
   "너무 길지 않게 작성하고, 플레이어의 자유의지를 존중하며 강제적 전개는 피하세요.";
 
-const getAiKey = () => localStorage.getItem(AI_KEY_LS) || "";
-const setAiKey = (k) => localStorage.setItem(AI_KEY_LS, k);
+const getAiKey = () => store.get(AI_KEY_LS) || "";
+const setAiKey = (k) => store.set(AI_KEY_LS, k);
 
 async function callGemini(prompt, systemText) {
   const key = getAiKey();
@@ -334,7 +352,7 @@ function buildAiPanel({ getContext, onShare }) {
       quick,
       el("div", { class: "play-row" }, [askIn, el("button", { class: "btn btn-primary", onclick: () => { if (askIn.value.trim()) { run(askIn.value.trim()); askIn.value = ""; } } }, "생성")]),
       out,
-      el("div", { class: "ai-foot" }, [el("button", { class: "btn btn-sm btn-ghost", onclick: () => { if (confirm("저장된 API 키를 삭제할까요?")) { localStorage.removeItem(AI_KEY_LS); renderKeyForm(); } } }, "키 변경/삭제")]),
+      el("div", { class: "ai-foot" }, [el("button", { class: "btn btn-sm btn-ghost", onclick: () => { if (confirm("저장된 API 키를 삭제할까요?")) { store.remove(AI_KEY_LS); renderKeyForm(); } } }, "키 변경/삭제")]),
     );
 
     async function run(instruction) {
@@ -397,7 +415,7 @@ async function upsertProfile(user) {
     const patch = {
       name: user.displayName || "이름없음",
       photo: user.photoURL || "",
-      email: user.email || "",
+      email: deleteField(), // 앱에서 쓰지 않는 개인정보는 보관하지 않음 (기존 저장분 정리)
       updatedAt: serverTimestamp(),
     };
     if (!snap.exists()) patch.createdAt = serverTimestamp();
@@ -847,7 +865,11 @@ function renderCampaign(view, id) {
           // GM 은 파티원을 제외할 수 있음
           isGM() && m.uid !== data.gmUid
             ? el("button", { class: "chip-x", title: "파티에서 제외", "aria-label": `${m.name || "멤버"} 제외`, onclick: () => {
-                if (confirm(`${m.name || "이 사용자"} 님을 파티에서 제외할까요?`)) removeMember(m.uid, m.name);
+                if (!confirm(`${m.name || "이 사용자"} 님을 파티에서 제외할까요?`)) return;
+                removeMember(m.uid, m.name).then((ok) => {
+                  // 신청서가 없을 수도 있으므로(직접 추가된 멤버 등) 실패는 무시
+                  if (ok) updateDoc(doc(db, "campaigns", id, "applications", m.uid), { status: "rejected" }).catch(() => {});
+                });
               } }, "\u00d7")
             : null,
         ])
@@ -877,7 +899,7 @@ function renderCampaign(view, id) {
   // ── 플레이 탭 (실시간 주사위 + 채팅) ──
   function renderPlayTab(panel) {
     // 정식 멤버가 아니어도 닉네임만 정하면 세션에 참가(주사위·채팅) 가능
-    const joinedAsGuest = !!currentUser && !!localStorage.getItem(sessionJoinKey(id));
+    const joinedAsGuest = !!currentUser && !!store.get(sessionJoinKey(id));
     const canPlay = isGM() || amMember() || joinedAsGuest;
     panel.appendChild(
       el("div", { class: "mode-hint" }, canPlay
@@ -901,9 +923,9 @@ function renderCampaign(view, id) {
         }
         // 익명 로그인 완료 시 auth 재렌더가 먼저 돌 수 있으므로, 참가 상태를 먼저 기록
         campaignTabs[id] = "play";
-        localStorage.setItem(sessionJoinKey(id), "1");
+        store.set(sessionJoinKey(id), "1");
         const user = await ensureUser();
-        if (!user) { localStorage.removeItem(sessionJoinKey(id)); return; }
+        if (!user) { store.remove(sessionJoinKey(id)); return; }
         render();
         toast("세션에 참가했습니다. 즐거운 플레이 되세요!");
       };
@@ -1204,10 +1226,12 @@ function renderCampaign(view, id) {
 
   // ── 실시간 구독 ──
   let playLog = [];
+  let appsMode = null, appsUnsub = null; // 신청서 구독 상태 (syncApplicationsSub)
   track(onSnapshot(doc(db, "campaigns", id),
     (snap) => {
       if (!snap.exists()) { wrap.innerHTML = ""; wrap.appendChild(emptyState({ icon: "🕳️", title: "존재하지 않는 캠페인입니다", desc: "삭제되었거나 주소가 잘못되었을 수 있어요.", action: el("a", { class: "btn", href: "#/" }, "모집 둘러보기") })); return; }
       data = { id: snap.id, ...snap.data() };
+      syncApplicationsSub();
       render();
     },
     (err) => {
@@ -1222,14 +1246,29 @@ function renderCampaign(view, id) {
     (snap) => { sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() })); if (data) render(); },
     (err) => console.error("세션 구독 오류", err)
   ));
-  track(onSnapshot(query(collection(db, "campaigns", id, "applications")),
-    (snap) => {
-      applications = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      applications.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      if (data) render();
-    },
-    (err) => console.error("신청 구독 오류", err)
-  ));
+  // 신청서 구독 — 보안 규칙상 GM 만 전체 목록을, 그 외 사용자는 본인 신청서만 읽을 수 있음.
+  // 누가 GM 인지는 캠페인 문서를 받아야 알 수 있으므로 그 뒤에 역할에 맞게 구독한다.
+  track(() => { if (appsUnsub) appsUnsub(); });
+  function syncApplicationsSub() {
+    const mode = isGM() ? "gm" : (currentUser ? "self" : "none");
+    if (mode === appsMode) return;
+    appsMode = mode;
+    if (appsUnsub) { appsUnsub(); appsUnsub = null; }
+    applications = [];
+    if (mode === "gm") {
+      appsUnsub = onSnapshot(collection(db, "campaigns", id, "applications"),
+        (snap) => {
+          applications = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          applications.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          render();
+        },
+        (err) => console.error("신청 구독 오류", err));
+    } else if (mode === "self") {
+      appsUnsub = onSnapshot(doc(db, "campaigns", id, "applications", currentUser.uid),
+        (snap) => { applications = snap.exists() ? [{ id: snap.id, ...snap.data() }] : []; render(); },
+        (err) => console.error("내 신청 구독 오류", err));
+    }
+  }
   // 최신 100개를 받아 시간순으로 뒤집어 표시 (asc+limit 는 '가장 오래된' 100개만 받아 새 로그가 안 보임)
   track(onSnapshot(query(collection(db, "campaigns", id, "rolls"), orderBy("createdAt", "desc"), limit(100)),
     (snap) => {
@@ -2002,7 +2041,7 @@ function fallbackAvatar(name = "?") {
 }
 
 // ── 테마(나이트/일반 모드) ─────────────────────────────────────
-const THEME_LS = "dicelog_theme";
+const THEME_LS = "trpg_theme";
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("themeToggle");
@@ -2014,17 +2053,19 @@ function applyTheme(theme) {
   }
 }
 function initTheme() {
-  const saved = localStorage.getItem(THEME_LS) === "light" ? "light" : "dark";
+  const saved = store.get(THEME_LS) === "light" ? "light" : "dark";
   applyTheme(saved);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.addEventListener("click", () => {
-    const next = (localStorage.getItem(THEME_LS) === "light") ? "dark" : "light";
-    localStorage.setItem(THEME_LS, next);
+    // 저장값이 아닌 현재 화면 기준으로 전환 (저장소가 막혀 있어도 토글이 왕복 동작)
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    store.set(THEME_LS, next);
     applyTheme(next);
   });
 }
 
 // ── 시작 ───────────────────────────────────────────────────────
 window.__trpgReady = true;   // index.html 의 로드 실패 안내를 해제
+migrateStorageKeys();
 initTheme();
 boot();

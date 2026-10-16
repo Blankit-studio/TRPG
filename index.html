@@ -14,7 +14,7 @@
     try {
       document.documentElement.setAttribute(
         "data-theme",
-        localStorage.getItem("dicelog_theme") === "light" ? "light" : "dark"
+        (localStorage.getItem("trpg_theme") || localStorage.getItem("dicelog_theme")) === "light" ? "light" : "dark"
       );
     } catch (e) {}
   </script>
